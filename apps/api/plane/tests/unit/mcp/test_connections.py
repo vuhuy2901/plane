@@ -70,6 +70,18 @@ def test_connection_api_rejects_invalid_key_and_workspace(api_client, api_token,
 
 
 @pytest.mark.django_db
+@override_settings(WEB_URL="http://testserver", MCP_PUBLIC_BASE_URL="https://mcp.example.com")
+def test_connection_api_returns_configured_public_mcp_url(api_client, api_token, workspace):
+    response = api_client.post(
+        "/api/mcp-connect/connections/",
+        {"plane_server_url": "http://testserver", "workspace_slug": workspace.slug, "api_key": api_token.token},
+        format="json",
+    )
+    assert response.status_code == 201
+    assert response.json()["mcp_url"].startswith("https://mcp.example.com/mcp/c/")
+
+
+@pytest.mark.django_db
 @override_settings(WEB_URL="http://testserver")
 def test_connected_workspace_projects_are_listed_for_demo_picker(api_client, api_token, workspace):
     project = Project.objects.create(name="Demo Project", identifier="DEMO", workspace=workspace)

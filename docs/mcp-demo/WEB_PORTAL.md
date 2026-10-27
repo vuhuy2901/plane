@@ -58,7 +58,13 @@ cloudflared tunnel route dns plane-mcp-demo plane-demo.example.edu
 cloudflared tunnel run --url http://localhost:80 plane-mcp-demo
 ```
 
-Use a named tunnel configuration for repeatable demonstrations. Set Plane's public `WEB_URL` to the HTTPS hostname, add the hostname to `MCP_ALLOWED_HOSTS`, restart the API service, and create new personal URLs after the public hostname is active.
+Use a named tunnel configuration for repeatable demonstrations. Set Plane's public `WEB_URL` to the HTTPS hostname and add the exact hostname to `MCP_ALLOWED_HOSTS`. If the client sends an `Origin` header, add that exact origin to `MCP_ALLOWED_ORIGINS` (for ChatGPT web, `https://chatgpt.com`). Keep the local origins needed by your web client in the list as well. Recreate the API container after changing its `.env`; a plain `docker compose restart` retains the old environment. Create new personal URLs after the public hostname is active.
+
+When Plane itself remains at localhost, set `MCP_PUBLIC_BASE_URL` to the tunnel's HTTPS origin. The portal will show and copy the public MCP URL while keeping the local Plane server URL unchanged. Update this setting whenever a quick tunnel gets a new hostname.
+
+For the local development stack, the API service already runs `plane.asgi:application` with Uvicorn. A separate host `manage.py runserver` on port 8000 can intercept requests and does not route `/mcp/c/*` to MCP. Stop any duplicate host server, then send the tunnel to the API service's port 8000. A quick tunnel hostname changes when the tunnel is restarted, so update the exact host allowlist and recreate the API service each time.
+
+If ChatGPT says the server cannot complete MCP setup, check the HTTP response to `initialize` and `tools/list` through the public URL. `Invalid Host header` in the API log means the tunnel hostname is missing from `MCP_ALLOWED_HOSTS`; HTTP 403 with an `Origin` header means the client origin is missing from `MCP_ALLOWED_ORIGINS`. A successful probe returns HTTP 200 with Plane server information and a nonempty tools list.
 
 ## API surface
 

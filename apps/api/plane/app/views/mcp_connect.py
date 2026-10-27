@@ -106,6 +106,13 @@ def _raw_cookie_token(request) -> str:
 
 
 def _connection_payload(request, connection: MCPConnection, raw_token: str) -> dict:
+    public_mcp_base_url = getattr(settings, "MCP_PUBLIC_BASE_URL", "")
+    mcp_path = f"/mcp/c/{raw_token}"
+    mcp_url = (
+        f"{normalize_server_url(public_mcp_base_url)}{mcp_path}"
+        if public_mcp_base_url
+        else request.build_absolute_uri(mcp_path)
+    )
     return {
         "connected": connection.is_available,
         "status": "connected" if connection.is_available else "disconnected",
@@ -113,7 +120,7 @@ def _connection_payload(request, connection: MCPConnection, raw_token: str) -> d
         "workspace": {"name": connection.workspace.name, "slug": connection.workspace.slug},
         "plane_server_url": connection.plane_server_url,
         "mcp_server_status": "available" if connection.is_available else "unavailable",
-        "mcp_url": request.build_absolute_uri(f"/mcp/c/{raw_token}"),
+        "mcp_url": mcp_url,
         "expires_at": connection.expires_at.isoformat(),
         "last_mcp_request_at": connection.last_mcp_request_at.isoformat() if connection.last_mcp_request_at else None,
     }

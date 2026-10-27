@@ -35,6 +35,10 @@ The existing MCP tests continue to cover tool registration, schemas, payload map
 
 The native browser automation bridge was unavailable during verification, so no visual browser click-through is claimed. The responsive layout was covered by implementation review and frontend compilation only.
 
+## Public ChatGPT MCP setup diagnosis
+
+On 27 October 2026, the public Cloudflare tunnel initially reached the MCP application but `initialize` was rejected because the tunnel hostname was absent from `MCP_ALLOWED_HOSTS`. A probe with `Origin: https://chatgpt.com` then returned HTTP 403 because that origin was absent from `MCP_ALLOWED_ORIGINS`. After adding both exact values and recreating the API container, an ephemeral test connection returned HTTP 200 for `initialize` and HTTP 200 with 14 tools for `tools/list` through the public HTTPS tunnel. The ephemeral connection was revoked after the test. This does not assert that ChatGPT's own connection setup has been retried successfully.
+
 ## Manual checks still required for a deployed demo
 
 - Public HTTPS routing through the approved tunnel hostname
