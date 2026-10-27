@@ -9,7 +9,6 @@ import { Outlet, redirect } from "react-router";
 import { cn } from "@plane/utils";
 // local
 import { ensureTrailingSlash } from "./compat/next/helper";
-import { PlaneAIChatWidget } from "@/components/ai-chat/chat-widget";
 import { AppProvider } from "./provider";
 import type { Route } from "./+types/layout";
 
@@ -33,7 +32,6 @@ export default function AppShellLayout() {
         <main className="relative h-full w-full overflow-hidden">
           <Outlet />
         </main>
-        <PlaneAIChatWidget />
       </div>
     </AppProvider>
   );
