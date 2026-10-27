@@ -12,10 +12,11 @@ from django.core.asgi import get_asgi_application  # noqa: E402
 # authentication and therefore ORM models.
 django_asgi_app = get_asgi_application()
 
-from plane.mcp import create_mcp_http_app, mcp_server, set_plane_api_application  # noqa: E402
+from plane.mcp import create_mcp_http_app, create_personal_mcp_http_app, mcp_server, set_plane_api_application  # noqa: E402
 
 set_plane_api_application(django_asgi_app)
 mcp_http_app = create_mcp_http_app()
+personal_mcp_http_app = create_personal_mcp_http_app()
 
 
 class PlaneASGIApplication:
@@ -26,9 +27,14 @@ class PlaneASGIApplication:
             await self._lifespan(receive, send)
             return
 
-        if scope["type"] == "http" and scope.get("path", "").rstrip("/") == "/mcp":
-            await mcp_http_app(scope, receive, send)
-            return
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path.rstrip("/") == "/mcp":
+                await mcp_http_app(scope, receive, send)
+                return
+            if path.startswith("/mcp/c/"):
+                await personal_mcp_http_app(scope, receive, send)
+                return
 
         await django_asgi_app(scope, receive, send)
 

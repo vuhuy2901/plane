@@ -9,4 +9,9 @@ if (-not (Test-Path -LiteralPath ".env")) {
 # Keep the local API lightweight and let uv load the stable SECRET_KEY and URLs.
 $env:DEBUG = "0"
 $env:PLANE_CORE_MODE = "1"
-uv run --env-file .env python manage.py runserver 127.0.0.1:8000 --settings=plane.settings.local
+$env:DJANGO_SETTINGS_MODULE = "plane.settings.local"
+if (-not $env:DATABASE_URL -or $env:DATABASE_URL -match "plane-db") {
+    $env:DATABASE_URL = "postgresql://plane:plane@127.0.0.1:5432/plane"
+}
+$env:FORWARDED_ALLOW_IPS = "*"
+uv run --env-file .env uvicorn plane.asgi:application --host 0.0.0.0 --port 8000 --proxy-headers

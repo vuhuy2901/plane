@@ -8,6 +8,9 @@ import { index, layout, route } from "@react-router/dev/routes";
 import type { RouteConfig, RouteConfigEntry } from "@react-router/dev/routes";
 
 export const coreRoutes: RouteConfigEntry[] = [
+  // Public Plane MCP connection portal
+  route("mcp-connect", "./mcp-connect/page.tsx"),
+
   // ========================================================================
   // USER MANAGEMENT ROUTES
   // ========================================================================

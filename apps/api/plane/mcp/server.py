@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
@@ -14,7 +15,13 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
-from .authentication import ASGIApp, MCPAPIKeyAuthenticationMiddleware, get_api_token
+from .activity import record_event
+from .authentication import (
+    ASGIApp,
+    MCPAPIKeyAuthenticationMiddleware,
+    MCPConnectionAuthenticationMiddleware,
+    get_api_token,
+)
 
 
 _plane_api_application: ASGIApp | None = None
@@ -65,6 +72,16 @@ async def _request_api(
         raise ToolError("The Plane API application is not available.")
 
     token = _token_from_context(ctx)
+    headers = dict(ctx.headers or {})
+    connection_id = headers.get("x-plane-mcp-connection-id")
+    request_id = headers.get("x-plane-mcp-request-id", "")
+    if connection_id:
+        await sync_to_async(record_event, thread_sensitive=True)(
+            connection_id,
+            "plane_request",
+            f"{method.upper()} {path}",
+            request_id=request_id,
+        )
     transport = httpx.ASGITransport(app=_plane_api_application)
     async with httpx.AsyncClient(transport=transport, base_url="http://plane.internal") as client:
         response = await client.request(
@@ -73,6 +90,15 @@ async def _request_api(
             params={key: value for key, value in (params or {}).items() if value is not None},
             json=payload,
             headers={"X-Api-Key": token},
+        )
+
+    if connection_id:
+        await sync_to_async(record_event, thread_sensitive=True)(
+            connection_id,
+            "plane_response",
+            f"Plane API responded with HTTP {response.status_code}.",
+            request_id=request_id,
+            succeeded=response.status_code < 400,
         )
 
     if response.status_code >= 400:
@@ -401,3 +427,19 @@ def create_mcp_http_app() -> ASGIApp:
         transport_security=transport_security,
     )
     return MCPAPIKeyAuthenticationMiddleware(app)
+
+
+def create_personal_mcp_http_app() -> ASGIApp:
+    """Build the bearer-URL variant while reusing the same MCP server and tools."""
+    transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_configured_values("MCP_ALLOWED_HOSTS"),
+        allowed_origins=_configured_values("MCP_ALLOWED_ORIGINS"),
+    )
+    app = mcp_server.streamable_http_app(
+        streamable_http_path="/mcp/",
+        json_response=True,
+        stateless_http=True,
+        transport_security=transport_security,
+    )
+    return MCPConnectionAuthenticationMiddleware(MCPAPIKeyAuthenticationMiddleware(app))

@@ -72,3 +72,40 @@ class APIActivityLog(BaseModel):
 
     def __str__(self):
         return str(self.token_identifier)
+
+
+class MCPConnection(BaseModel):
+    """A revocable bearer-URL connection for the Plane MCP demo portal."""
+
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    encrypted_api_key = models.TextField()
+    plane_server_url = models.URLField(max_length=500)
+    workspace = models.ForeignKey("db.Workspace", related_name="mcp_connections", on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="mcp_connections", on_delete=models.CASCADE)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_mcp_request_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "mcp_connections"
+        ordering = ("-created_at",)
+
+    @property
+    def is_available(self):
+        from django.utils import timezone
+
+        return self.revoked_at is None and self.expires_at > timezone.now()
+
+
+class MCPConnectionEvent(BaseModel):
+    """A sanitized event emitted while a portal connection processes MCP work."""
+
+    connection = models.ForeignKey(MCPConnection, related_name="events", on_delete=models.CASCADE)
+    event_type = models.CharField(max_length=40)
+    summary = models.CharField(max_length=500)
+    request_id = models.CharField(max_length=64, blank=True)
+    succeeded = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "mcp_connection_events"
+        ordering = ("-created_at",)

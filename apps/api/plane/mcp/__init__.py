@@ -4,6 +4,6 @@
 
 """Model Context Protocol integration for Plane."""
 
-from .server import create_mcp_http_app, mcp_server, set_plane_api_application
+from .server import create_mcp_http_app, create_personal_mcp_http_app, mcp_server, set_plane_api_application
 
-__all__ = ["create_mcp_http_app", "mcp_server", "set_plane_api_application"]
+__all__ = ["create_mcp_http_app", "create_personal_mcp_http_app", "mcp_server", "set_plane_api_application"]

@@ -202,6 +202,7 @@ for _mcp_url_setting in ("WEB_URL", "APP_BASE_URL", "API_BASE_URL"):
 
 MCP_ALLOWED_HOSTS = os.environ.get("MCP_ALLOWED_HOSTS") or ",".join(dict.fromkeys(_mcp_default_hosts))
 MCP_ALLOWED_ORIGINS = os.environ.get("MCP_ALLOWED_ORIGINS") or ",".join(cors_allowed_origins)
+MCP_CONNECTION_TTL_HOURS = int(os.environ.get("MCP_CONNECTION_TTL_HOURS", "168"))
 
 # Application Settings
 WSGI_APPLICATION = "plane.wsgi.application"

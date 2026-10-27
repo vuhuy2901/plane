@@ -6,8 +6,10 @@
 
 import React, { useMemo } from "react";
 import { observer } from "mobx-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Collapsible } from "@makeplane/propel/components/collapsible";
-import { MoreHorizontalOutline } from "@makeplane/propel/icons";
+import { Chatgpt, MoreHorizontalOutline } from "@makeplane/propel/icons";
 // plane imports
 import {
   WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS,
@@ -29,6 +31,7 @@ import { SidebarItemBase } from "./sidebar-item";
 
 export const SidebarMenuItems = observer(function SidebarMenuItems() {
   // routers
+  const pathname = usePathname();
   const { setValue: toggleWorkspaceMenu, storedValue: isWorkspaceMenuOpen } = useLocalStorage<boolean>(
     "is_workspace_menu_open",
     true
@@ -99,6 +102,14 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
           // oxlint-disable-next-line react/no-array-index-key
           <SidebarItemBase key={`static_${_index}`} item={item} />
         ))}
+        <Link href="/mcp-connect/">
+          <SidebarNavItem isActive={pathname.startsWith("/mcp-connect")}>
+            <div className="flex items-center gap-1.5 py-[1px]">
+              <Chatgpt className="size-4 flex-shrink-0" />
+              <p className="text-13 leading-5 font-medium">AI / MCP</p>
+            </div>
+          </SidebarNavItem>
+        </Link>
       </div>
       <Collapsible
         placement="sidebar"

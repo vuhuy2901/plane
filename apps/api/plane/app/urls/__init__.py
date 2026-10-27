@@ -24,8 +24,10 @@ from .timezone import urlpatterns as timezone_urls
 from .exporter import urlpatterns as exporter_urls
 from .workflow import urlpatterns as workflow_urls
 from .automation import urlpatterns as automation_urls
+from .mcp_connect import urlpatterns as mcp_connect_urls
 
 urlpatterns = [
+    *mcp_connect_urls,
     *automation_urls,
     *analytic_urls,
     *asset_urls,

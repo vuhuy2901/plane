@@ -28,6 +28,12 @@ MIDDLEWARE = [
 ]
 CORS_ALLOW_ALL_ORIGINS = True
 
+# Trust reverse proxies and tunnels (like cloudflared or ngrok)
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+MCP_ALLOWED_HOSTS = os.environ.get("MCP_ALLOWED_HOSTS", "*")
+MCP_ALLOWED_ORIGINS = os.environ.get("MCP_ALLOWED_ORIGINS", "*")
+
 # Only show emails in console don't send it to smtp
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 
