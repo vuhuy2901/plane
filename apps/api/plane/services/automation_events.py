@@ -1,0 +1,84 @@
+"""Transactional adapters for comments and real Work Item relations."""
+
+from django.db import transaction
+from django.db.models import Q
+
+from plane.db.models import Issue, IssueRelation, ProjectAutomationEvent
+from plane.services.automation_runtime import capture_context, snapshot
+
+
+def comment_created(comment):
+    context = capture_context(comment.project_id)
+    if not context or comment.issue.project_id != comment.project_id:
+        return
+    ProjectAutomationEvent.objects.get_or_create(
+        deduplication_key=f"comment:{comment.id}",
+        defaults={
+            "project": comment.project,
+            "issue": comment.issue,
+            "snapshot": snapshot(comment.issue),
+            "triggers": ["comment_added"],
+            "candidates": context["candidates"],
+            "context": {
+                "comment_id": str(comment.id),
+                "author_id": str(comment.actor_id),
+                "actor_id": str(comment.actor_id),
+            },
+        },
+    )
+
+
+@transaction.atomic
+def bulk_create_relations(relations, **kwargs):
+    """Record only newly persisted rows, including when bulk insert ignores conflicts."""
+    if not relations:
+        return []
+    ids = {item.issue_id for item in relations} | {item.related_issue_id for item in relations}
+    list(Issue.objects.select_for_update().filter(pk__in=ids).order_by("id"))
+    query = IssueRelation.objects.filter(Q(issue_id__in=ids), related_issue_id__in=ids)
+    existing = set(query.values_list("id", flat=True))
+    result = IssueRelation.objects.bulk_create(relations, **kwargs)
+    for relation in query.exclude(pk__in=existing).select_related("issue__project", "related_issue__project"):
+        relation_created(relation)
+    return result
+
+
+def relation_created(relation):
+    from plane.db.models.issue import IssueRelationChoices
+
+    # Keep stored direction in history; expose a canonical source -> target view.
+    source, target = relation.issue, relation.related_issue
+    kind = relation.relation_type
+    aliases = [kind]
+    reverse = dict(IssueRelationChoices._RELATION_PAIRS).get(kind)
+    if reverse and reverse != kind:
+        aliases.append(reverse)
+    if kind == "blocked_by":
+        source, target = target, source
+    context = capture_context(target.project_id)
+    if not context:
+        return
+    metadata = {
+        "relation_id": str(relation.id),
+        "relation_types": aliases,
+        "source_id": str(source.id),
+        "target_id": str(target.id),
+        "stored_issue_id": str(relation.issue_id),
+        "stored_related_issue_id": str(relation.related_issue_id),
+        "stored_relation_type": kind,
+        "actor_id": str(relation.created_by_id) if relation.created_by_id else None,
+    }
+    foreign = source.project_id != target.project_id
+    if foreign:
+        metadata["skip_reason"] = "Cross-project relationships are not supported by Automation."
+    ProjectAutomationEvent.objects.get_or_create(
+        deduplication_key=f"relation:{relation.id}",
+        defaults={
+            "project": target.project,
+            "issue": target,
+            "snapshot": snapshot(target),
+            "triggers": ["work_item_linked"],
+            "candidates": context["candidates"],
+            "context": metadata,
+        },
+    )

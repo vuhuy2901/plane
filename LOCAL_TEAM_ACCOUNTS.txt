@@ -1,0 +1,17 @@
+QLDP / QLDAPM-Final - Local team accounts
+
+All four accounts use this password: PlaneLocal123!
+
+Name    Role      Email
+Quang   PM        quang.pm@local.test
+Tú      Tester    tu.tester@local.test
+Nghi    FE        nghi.fe@local.test
+Nam     BA        nam.ba@local.test
+
+
+password: Plane@2026!
+
+All four are Project Admins in QLDP.
+Open the Plane server in a browser and sign in with the email and password above.
+This file is on the server filesystem; it is not a page inside the Plane app.
+Keep this file private to the local team. Change these shared passwords before exposing the server to the internet.
