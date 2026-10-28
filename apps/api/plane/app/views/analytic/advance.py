@@ -38,6 +38,13 @@ class AdvanceAnalyticsBaseView(BaseAPIView):
             date_filter=self.request.GET.get("date_filter", None),
             project_ids=self.request.GET.get("project_ids", None),
         )
+        self.count_mode = self.request.GET.get("count_mode", "all")
+
+    def get_issue_queryset(self) -> QuerySet:
+        queryset = Issue.issue_objects.filter(**self.filters["base_filters"])
+        if self.count_mode == "top_level":
+            queryset = queryset.filter(parent__isnull=True)
+        return queryset
 
 
 class AdvanceAnalyticsEndpoint(AdvanceAnalyticsBaseView):
@@ -83,7 +90,7 @@ class AdvanceAnalyticsEndpoint(AdvanceAnalyticsBaseView):
             "total_members": self.get_filtered_counts(members_query.filter(role=ROLE.MEMBER.value)),
             "total_guests": self.get_filtered_counts(members_query.filter(role=ROLE.GUEST.value)),
             "total_projects": self.get_filtered_counts(Project.objects.filter(**self.filters["project_filters"])),
-            "total_work_items": self.get_filtered_counts(Issue.issue_objects.filter(**self.filters["base_filters"])),
+            "total_work_items": self.get_filtered_counts(self.get_issue_queryset()),
             "total_cycles": self.get_filtered_counts(Cycle.objects.filter(**self.filters["base_filters"])),
             "total_intake": self.get_filtered_counts(
                 Issue.objects.filter(**self.filters["base_filters"]).filter(
@@ -93,7 +100,7 @@ class AdvanceAnalyticsEndpoint(AdvanceAnalyticsBaseView):
         }
 
     def get_work_items_stats(self) -> Dict[str, Dict[str, int]]:
-        base_queryset = Issue.issue_objects.filter(**self.filters["base_filters"])
+        base_queryset = self.get_issue_queryset()
 
         return {
             "total_work_items": self.get_filtered_counts(base_queryset),
@@ -124,7 +131,7 @@ class AdvanceAnalyticsEndpoint(AdvanceAnalyticsBaseView):
 class AdvanceAnalyticsStatsEndpoint(AdvanceAnalyticsBaseView):
     def get_project_issues_stats(self) -> QuerySet:
         # Get the base queryset with workspace and project filters
-        base_queryset = Issue.issue_objects.filter(**self.filters["base_filters"])
+        base_queryset = self.get_issue_queryset()
 
         # Apply date range filter if available
         if self.filters["chart_period_range"]:
@@ -144,7 +151,7 @@ class AdvanceAnalyticsStatsEndpoint(AdvanceAnalyticsBaseView):
         )
 
     def get_work_items_stats(self) -> Dict[str, Dict[str, int]]:
-        base_queryset = Issue.issue_objects.filter(**self.filters["base_filters"])
+        base_queryset = self.get_issue_queryset()
         return (
             base_queryset.values("project_id", "project__name")
             .annotate(
@@ -174,7 +181,7 @@ class AdvanceAnalyticsStatsEndpoint(AdvanceAnalyticsBaseView):
 class AdvanceAnalyticsChartEndpoint(AdvanceAnalyticsBaseView):
     def project_chart(self) -> List[Dict[str, Any]]:
         # Get the base queryset with workspace and project filters
-        base_queryset = Issue.issue_objects.filter(**self.filters["base_filters"])
+        base_queryset = self.get_issue_queryset()
         date_filter = {}
 
         # Apply date range filter if available
@@ -219,7 +226,7 @@ class AdvanceAnalyticsChartEndpoint(AdvanceAnalyticsBaseView):
     def work_item_completion_chart(self) -> Dict[str, Any]:
         # Get the base queryset
         queryset = (
-            Issue.issue_objects.filter(**self.filters["base_filters"])
+            self.get_issue_queryset()
             .select_related("workspace", "state", "parent")
             .prefetch_related("assignees", "labels", "issue_module__module", "issue_cycle__cycle")
         )
@@ -296,7 +303,7 @@ class AdvanceAnalyticsChartEndpoint(AdvanceAnalyticsBaseView):
 
         elif type == "custom-work-items":
             queryset = (
-                Issue.issue_objects.filter(**self.filters["base_filters"])
+                self.get_issue_queryset()
                 .select_related("workspace", "state", "parent")
                 .prefetch_related("assignees", "labels", "issue_module__module", "issue_cycle__cycle")
             )

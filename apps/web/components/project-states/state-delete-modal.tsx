@@ -13,6 +13,7 @@ import { setToast } from "@plane/blocks/toast";
 import type { IState } from "@plane/types";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { getStateDeleteErrorMessage } from "./delete-error";
 
 type TStateDeleteModal = {
   isOpen: boolean;
@@ -42,19 +43,11 @@ export const StateDeleteModal = observer(function StateDeleteModal(props: TState
       await deleteState(workspaceSlug.toString(), data.project_id, data.id);
       handleClose();
     } catch (err) {
-      if ((err as { status?: number })?.status === 400)
-        setToast({
-          type: "error",
-          title: "Error!",
-          message:
-            "This state contains some work items within it, please move them to some other state to delete this state.",
-        });
-      else
-        setToast({
-          type: "error",
-          title: "Error!",
-          message: "State could not be deleted. Please try again.",
-        });
+      setToast({
+        type: "error",
+        title: "State cannot be deleted",
+        message: getStateDeleteErrorMessage(err),
+      });
     } finally {
       setIsDeleteLoading(false);
     }

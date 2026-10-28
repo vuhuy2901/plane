@@ -6,32 +6,20 @@
 
 import React from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
-import useSWR from "swr";
 // plane package imports
 import { useTranslation } from "@plane/i18n";
 import { Loader } from "@plane/blocks/skeleton";
 // plane web hooks
 import { useAnalytics } from "@/hooks/store/use-analytics";
-import { useProject } from "@/hooks/store/use-project";
+import { useWorkspaceReport } from "@/components/analytics/report";
 // plane web components
 import AnalyticsSectionWrapper from "../analytics-section-wrapper";
 import ActiveProjectItem from "./active-project-item";
 
 const ActiveProjects = observer(function ActiveProjects() {
   const { t } = useTranslation();
-  const { fetchProjectAnalyticsCount } = useProject();
-  const { workspaceSlug } = useParams();
   const { selectedDurationLabel } = useAnalytics();
-  const { data: projectAnalyticsCount, isLoading: isProjectAnalyticsCountLoading } = useSWR(
-    workspaceSlug ? ["projectAnalyticsCount", workspaceSlug] : null,
-    workspaceSlug
-      ? () =>
-          fetchProjectAnalyticsCount(workspaceSlug.toString(), {
-            fields: "total_work_items,total_completed_work_items",
-          })
-      : null
-  );
+  const { data: report, isLoading } = useWorkspaceReport();
   return (
     <AnalyticsSectionWrapper
       title={`${t("workspace_analytics.active_projects")}`}
@@ -39,10 +27,17 @@ const ActiveProjects = observer(function ActiveProjects() {
       className="md:col-span-2"
     >
       <div className="flex h-[350px] flex-col gap-4 overflow-auto">
-        {isProjectAnalyticsCountLoading &&
-          Array.from({ length: 5 }).map((_, index) => <Loader.Item key={index} height="40px" width="100%" />)}
-        {!isProjectAnalyticsCountLoading &&
-          projectAnalyticsCount?.map((project) => <ActiveProjectItem key={project.id} project={project} />)}
+        {isLoading &&
+          ["one", "two", "three", "four", "five"].map((loaderId) => (
+            <Loader.Item key={`active-project-loader-${loaderId}`} height="40px" width="100%" />
+          ))}
+        {!isLoading &&
+          report?.projects.map((project) => (
+            <ActiveProjectItem
+              key={project.id}
+              project={{ id: project.id, completed_issues: project.completed, total_issues: project.total }}
+            />
+          ))}
       </div>
     </AnalyticsSectionWrapper>
   );

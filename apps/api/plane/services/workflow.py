@@ -546,21 +546,6 @@ def publish_workflow(version, actor):
         if not result["valid"]:
             raise WorkflowRuleError("INVALID_WORKFLOW", "The workflow cannot be published.", result)
 
-        # Do not publish a graph that strands existing work items. Migration is a separate,
-        # explicit operation and is deliberately not guessed here.
-        state_ids = set(version.states.exclude(state__isnull=True).values_list("state_id", flat=True))
-        mapped_type_ids = list(version.workflow.issue_type_mappings.values_list("issue_type_id", flat=True))
-        stranded = Issue.objects.filter(
-            project_id=version.project_id,
-            type_id__in=mapped_type_ids,
-        ).exclude(state_id__in=state_ids)
-        if version.workflow.active_version_id and stranded.exists():
-            raise WorkflowRuleError(
-                "STATE_MIGRATION_REQUIRED",
-                "Existing work items use states that are not present in this draft.",
-                {"work_item_count": stranded.count()},
-            )
-
         for node in version.states.select_for_update():
             if node.state_id:
                 if node.state.project_id != version.project_id:
@@ -604,6 +589,24 @@ def publish_workflow(version, actor):
                     )
                     node.state = state
                     node.save(update_fields=["state", "updated_at"])
+
+        # Resolve draft nodes to their Plane states before checking for stranded
+        # work items. A draft can legitimately contain an unlinked node whose
+        # name matches an existing project state (for example after applying a
+        # template). Checking first incorrectly treats every item in that state
+        # as requiring migration even though publishing reuses the same state.
+        state_ids = set(version.states.exclude(state__isnull=True).values_list("state_id", flat=True))
+        mapped_type_ids = list(version.workflow.issue_type_mappings.values_list("issue_type_id", flat=True))
+        stranded = Issue.objects.filter(
+            project_id=version.project_id,
+            type_id__in=mapped_type_ids,
+        ).exclude(state_id__in=state_ids)
+        if version.workflow.active_version_id and stranded.exists():
+            raise WorkflowRuleError(
+                "STATE_MIGRATION_REQUIRED",
+                "Existing work items use states that are not present in this draft.",
+                {"work_item_count": stranded.count()},
+            )
 
         version.status = WorkflowVersion.Status.PUBLISHED
         version.published_at = timezone.now()

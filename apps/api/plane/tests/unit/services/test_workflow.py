@@ -189,6 +189,34 @@ class TestWorkflowEngine:
         assert list(State.objects.filter(project=project).values_list("name", flat=True)) == ["Inbox zero"]
         assert start.state_id is not None
 
+    def test_publish_resolves_existing_state_before_checking_for_stranded_work_items(self):
+        actor = UserFactory()
+        project = ProjectFactory(workspace__owner=actor)
+        issue, transition, _, _ = _configured_workflow(project, actor=actor)
+        workflow = transition.workflow_version.workflow
+        draft = WorkflowVersion.objects.create(
+            project=project,
+            workflow=workflow,
+            version=2,
+        )
+        draft_state = WorkflowVersionState.objects.create(
+            project=project,
+            workflow_version=draft,
+            state=None,
+            name=issue.state.name,
+            color=issue.state.color,
+            group=issue.state.group,
+            is_start=True,
+            is_end=True,
+        )
+
+        published, _ = publish_workflow(draft, actor)
+
+        draft_state.refresh_from_db()
+        assert published.status == WorkflowVersion.Status.PUBLISHED
+        assert draft_state.state_id == issue.state_id
+        assert workflow.issue_type_mappings.count() == 1
+
 
 @pytest.mark.unit
 @pytest.mark.django_db(transaction=True)

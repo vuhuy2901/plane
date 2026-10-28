@@ -32,11 +32,13 @@ export const meta: Route.MetaFunction = () => [
 
 type ConnectionStatus = {
   connected: boolean;
-  status: "connected" | "disconnected";
+  status: "connected" | "disconnected" | "expired" | "revoked";
   user?: { name: string; email: string };
   workspace?: { name: string; slug: string };
   plane_server_url: string;
   mcp_server_status?: string;
+  public_base_url?: string;
+  effective_public_base_url?: string;
   mcp_url?: string;
   expires_at?: string;
   last_mcp_request_at?: string | null;
@@ -120,23 +122,35 @@ const McpUrlBox = ({
   id,
   url,
   onCopy,
-  publicBaseUrl,
-  setPublicBaseUrl,
+  configuredPublicBaseUrl,
+  effectivePublicBaseUrl,
+  publicUrlDraft,
+  setPublicUrlDraft,
+  isEditing,
+  onEdit,
+  onSave,
+  onCancel,
+  saving,
 }: {
   id: string;
   url: string;
   onCopy: () => void;
-  publicBaseUrl: string;
-  setPublicBaseUrl: (value: string) => void;
+  configuredPublicBaseUrl: string;
+  effectivePublicBaseUrl: string;
+  publicUrlDraft: string;
+  setPublicUrlDraft: (value: string) => void;
+  isEditing: boolean;
+  onEdit: () => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
 }) => (
   <div className="mt-6 rounded-md border border-subtle bg-layer-1 p-4">
     <div className="flex items-center justify-between gap-2">
       <label className="text-12 font-medium text-secondary" htmlFor={id}>
         Personal MCP URL
       </label>
-      <span className="text-11 font-medium text-tertiary">
-        {url ? "Đã sẵn sàng kết nối" : "Chưa có URL"}
-      </span>
+      <span className="text-11 font-medium text-tertiary">{url ? "Đã sẵn sàng kết nối" : "Chưa có URL"}</span>
     </div>
     <div className="mt-2 flex flex-col gap-2 sm:flex-row">
       <input
@@ -145,7 +159,7 @@ const McpUrlBox = ({
         value={url}
         placeholder="Chưa có URL MCP (Hãy tạo ở tab Connect trước)..."
         onClick={(e) => e.currentTarget.select()}
-        className="min-w-0 flex-1 rounded-md border border-subtle bg-layer-2 px-3 py-2 font-code text-12 text-primary outline-none focus:border-accent-strong select-all"
+        className="min-w-0 flex-1 rounded-md border border-subtle bg-layer-2 px-3 py-2 font-code text-12 text-primary outline-none select-all focus:border-accent-strong"
       />
       <Button
         variant="primary"
@@ -157,18 +171,37 @@ const McpUrlBox = ({
       />
     </div>
     <div className="mt-3 border-t border-subtle pt-3">
-      <label className="text-11 font-medium text-secondary" htmlFor={`${id}-tunnel`}>
-        Domain Tunnel / Cloudflare URL (Tùy chọn ghi đè khi kết nối từ xa):
-      </label>
-      <input
-        id={`${id}-tunnel`}
-        value={publicBaseUrl}
-        onChange={(e) => setPublicBaseUrl(e.target.value)}
-        placeholder="Ví dụ: https://sample.trycloudflare.com"
-        className="mt-1 w-full rounded-md border border-subtle bg-layer-2 px-3 py-1.5 font-code text-12 text-primary outline-none placeholder:text-tertiary focus:border-accent-strong"
-      />
+      <div className="flex items-center justify-between gap-3">
+        <label className="text-11 font-medium text-secondary" htmlFor={`${id}-tunnel`}>
+          Public Tunnel URL (Optional)
+        </label>
+        {url && !isEditing && (
+          <button type="button" className="text-12 font-medium text-accent-primary hover:underline" onClick={onEdit}>
+            Edit Public URL
+          </button>
+        )}
+      </div>
+      {isEditing ? (
+        <>
+          <input
+            id={`${id}-tunnel`}
+            value={publicUrlDraft}
+            onChange={(event) => setPublicUrlDraft(event.target.value)}
+            placeholder="https://geopolitical-anthropomorphously-rosena.ngrok-free.dev"
+            className="mt-1 w-full rounded-md border border-subtle bg-layer-2 px-3 py-1.5 font-code text-12 text-primary outline-none placeholder:text-tertiary focus:border-accent-strong"
+          />
+          <div className="mt-2 flex gap-2">
+            <Button variant="primary" size="sm" stretch="auto" label="Save" loading={saving} onClick={onSave} />
+            <Button variant="secondary" size="sm" stretch="auto" label="Cancel" onClick={onCancel} />
+          </div>
+        </>
+      ) : (
+        <div className="mt-1 font-code text-12 break-all text-primary">
+          {configuredPublicBaseUrl || `${effectivePublicBaseUrl} (server default)`}
+        </div>
+      )}
       <p className="mt-1 text-11 text-tertiary">
-        Nếu kết nối từ ChatGPT web hoặc bên ngoài mạng LAN, hãy dán link tunnel vào ô trên để tự động tạo MCP URL công khai.
+        Supports HTTPS tunnels and custom domains. Localhost is development-only.
       </p>
     </div>
   </div>
@@ -177,7 +210,9 @@ const McpUrlBox = ({
 export default function MCPConnectPage() {
   const [tab, setTab] = useState<PortalTab>("connect");
   const [connection, setConnection] = useState<ConnectionStatus | null>(null);
-  const [publicBaseUrl, setPublicBaseUrl] = useState("");
+  const [publicBaseUrl, setPublicBaseUrl] = useState("https://geopolitical-anthropomorphously-rosena.ngrok-free.dev");
+  const [publicUrlDraft, setPublicUrlDraft] = useState("https://geopolitical-anthropomorphously-rosena.ngrok-free.dev");
+  const [isEditingPublicUrl, setIsEditingPublicUrl] = useState(false);
   const [planeServerUrl, setPlaneServerUrl] = useState("");
   const [workspaceSlug, setWorkspaceSlug] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -196,41 +231,21 @@ export default function MCPConnectPage() {
   const [demoResult, setDemoResult] = useState<unknown>(null);
   const selectedTool = useMemo(() => tools.find((tool) => tool.name === selectedToolName), [tools, selectedToolName]);
 
-  const effectiveMcpUrl = useMemo(() => {
-    if (!connection?.mcp_url) return "";
-    let rawUrl = connection.mcp_url;
-    if (rawUrl.includes("26.8.217.232")) {
-      rawUrl = rawUrl.replace("26.8.217.232", "localhost");
-    }
-    const tokenMatch = rawUrl.match(/\/mcp\/c\/([^/?#]+)/);
-    const token = tokenMatch ? tokenMatch[1] : "";
-    if (!token) return rawUrl;
-
-    if (publicBaseUrl.trim()) {
-      const cleanBase = publicBaseUrl.trim().replace(/\/+$/, "");
-      return `${cleanBase}/mcp/c/${token}`;
-    }
-
-    if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-      return `${window.location.origin}/mcp/c/${token}`;
-    }
-
-    return rawUrl;
-  }, [connection?.mcp_url, publicBaseUrl]);
+  const effectiveMcpUrl = connection?.mcp_url || "";
 
   const loadStatus = useCallback(async () => {
     try {
       const status = await api<ConnectionStatus>("/api/mcp-connect/status/");
-      if (status.plane_server_url && status.plane_server_url.includes("26.8.217.232")) {
-        status.plane_server_url = status.plane_server_url.replace("26.8.217.232", "localhost");
-      }
-      if (status.mcp_url && status.mcp_url.includes("26.8.217.232")) {
-        status.mcp_url = status.mcp_url.replace("26.8.217.232", "localhost");
-      }
       setConnection(status);
+      const defaultUrl =
+        status.public_base_url ||
+        status.effective_public_base_url ||
+        "https://geopolitical-anthropomorphously-rosena.ngrok-free.dev";
+      setPublicBaseUrl(defaultUrl);
+      setPublicUrlDraft(defaultUrl);
       setPlaneServerUrl(status.plane_server_url || window.location.origin);
       if (status.workspace) setWorkspaceSlug(status.workspace.slug);
-      if (status.connected) setTab((current) => (current === "connect" ? "dashboard" : current));
+      if (status.mcp_url) setTab((current) => (current === "connect" ? "dashboard" : current));
     } catch (error) {
       setPlaneServerUrl(window.location.origin);
       setNotice({ kind: "error", text: error instanceof Error ? error.message : "Plane server is unavailable." });
@@ -301,11 +316,18 @@ export default function MCPConnectPage() {
         create ? "/api/mcp-connect/connections/" : "/api/mcp-connect/test/",
         {
           method: "POST",
-          body: JSON.stringify({ plane_server_url: planeServerUrl, workspace_slug: workspaceSlug, api_key: apiKey }),
+          body: JSON.stringify({
+            plane_server_url: planeServerUrl,
+            public_base_url: publicBaseUrl,
+            workspace_slug: workspaceSlug,
+            api_key: apiKey,
+          }),
         }
       );
       if (create) {
         setConnection(payload);
+        setPublicBaseUrl(payload.public_base_url || "");
+        setPublicUrlDraft(payload.public_base_url || "");
         setApiKey("");
         setShowApiKey(false);
         setTab("dashboard");
@@ -315,6 +337,29 @@ export default function MCPConnectPage() {
       }
     } catch (error) {
       setNotice({ kind: "error", text: error instanceof Error ? error.message : "Connection validation failed." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const savePublicUrl = async () => {
+    setBusy("public-url");
+    setNotice(null);
+    try {
+      const payload = await api<ConnectionStatus>("/api/mcp-connect/connections/", {
+        method: "PATCH",
+        body: JSON.stringify({ public_base_url: publicUrlDraft }),
+      });
+      setConnection(payload);
+      setPublicBaseUrl(payload.public_base_url || "");
+      setPublicUrlDraft(payload.public_base_url || "");
+      setIsEditingPublicUrl(false);
+      setNotice({
+        kind: "success",
+        text: "Public URL updated. If your MCP client uses the previous URL, update its server configuration.",
+      });
+    } catch (error) {
+      setNotice({ kind: "error", text: error instanceof Error ? error.message : "Public URL update failed." });
     } finally {
       setBusy(null);
     }
@@ -338,7 +383,8 @@ export default function MCPConnectPage() {
         text: `Đã copy MCP URL: ${urlToCopy}`,
       });
     } else {
-      const input = (document.getElementById("mcp-url") || document.getElementById("mcp-url-guide")) as HTMLInputElement | null;
+      const input = (document.getElementById("mcp-url") ||
+        document.getElementById("mcp-url-guide")) as HTMLInputElement | null;
       if (input) {
         input.focus();
         input.select();
@@ -355,6 +401,8 @@ export default function MCPConnectPage() {
     try {
       const payload = await api<ConnectionStatus>("/api/mcp-connect/regenerate/", { method: "POST", body: "{}" });
       setConnection(payload);
+      setPublicBaseUrl(payload.public_base_url || "");
+      setPublicUrlDraft(payload.public_base_url || "");
       setNotice({ kind: "success", text: "The old URL was revoked and a new URL was generated." });
     } catch (error) {
       setNotice({ kind: "error", text: error instanceof Error ? error.message : "Regeneration failed." });
@@ -368,6 +416,7 @@ export default function MCPConnectPage() {
     try {
       await api("/api/mcp-connect/revoke/", { method: "POST", body: "{}" });
       setConnection({ connected: false, status: "disconnected", plane_server_url: planeServerUrl });
+      setIsEditingPublicUrl(false);
       setTools([]);
       setProjects([]);
       setEvents([]);
@@ -452,7 +501,7 @@ export default function MCPConnectPage() {
 
   const tabs: { id: PortalTab; label: string; disabled?: boolean }[] = [
     { id: "connect", label: "Connect" },
-    { id: "dashboard", label: "Dashboard", disabled: !connection?.connected },
+    { id: "dashboard", label: "Dashboard", disabled: !connection?.mcp_url },
     { id: "tools", label: "Tools", disabled: !connection?.connected },
     { id: "guide", label: "AI / ChatGPT" },
     { id: "demo", label: "Live demo", disabled: !connection?.connected },
@@ -549,6 +598,15 @@ export default function MCPConnectPage() {
                 <InputField
                   size="xl"
                   orientation="vertical"
+                  label="Public Tunnel URL (Optional)"
+                  description="Use an HTTPS ngrok, Cloudflare Tunnel, or custom domain. A server default is used when blank."
+                  value={publicBaseUrl}
+                  onChange={(event) => setPublicBaseUrl(event.target.value)}
+                  placeholder="https://geopolitical-anthropomorphously-rosena.ngrok-free.dev"
+                />
+                <InputField
+                  size="xl"
+                  orientation="vertical"
                   label="Workspace Slug"
                   description="Find this value in the workspace URL."
                   required
@@ -610,7 +668,7 @@ export default function MCPConnectPage() {
                 </div>
               </form>
             </section>
-          ) : tab === "dashboard" && connection?.connected ? (
+          ) : tab === "dashboard" && connection?.mcp_url ? (
             <section>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -619,8 +677,20 @@ export default function MCPConnectPage() {
                     This URL is a bearer credential. Share it only with the MCP client you trust.
                   </p>
                 </div>
-                <span className="rounded-md border border-success-strong bg-success-subtle px-2.5 py-1 text-12 font-medium text-success-primary">
-                  Connected
+                <span
+                  className={`rounded-md border px-2.5 py-1 text-12 font-medium ${
+                    connection.connected
+                      ? "border-success-strong bg-success-subtle text-success-primary"
+                      : "border-warning-strong bg-warning-subtle text-warning-primary"
+                  }`}
+                >
+                  {connection.status === "connected"
+                    ? "Connected"
+                    : connection.status === "expired"
+                      ? "Expired"
+                      : connection.status === "revoked"
+                        ? "Revoked"
+                        : "Disconnected"}
                 </span>
               </div>
               <dl className="mt-7 grid gap-x-8 gap-y-5 border-y border-subtle py-6 sm:grid-cols-2">
@@ -642,8 +712,21 @@ export default function MCPConnectPage() {
                 id="mcp-url"
                 url={effectiveMcpUrl}
                 onCopy={() => void copyMcpUrl()}
-                publicBaseUrl={publicBaseUrl}
-                setPublicBaseUrl={setPublicBaseUrl}
+                configuredPublicBaseUrl={connection.public_base_url || ""}
+                effectivePublicBaseUrl={connection.effective_public_base_url || ""}
+                publicUrlDraft={publicUrlDraft}
+                setPublicUrlDraft={setPublicUrlDraft}
+                isEditing={isEditingPublicUrl}
+                onEdit={() => {
+                  setPublicUrlDraft(connection.public_base_url || "");
+                  setIsEditingPublicUrl(true);
+                }}
+                onSave={() => void savePublicUrl()}
+                onCancel={() => {
+                  setPublicUrlDraft(connection.public_base_url || "");
+                  setIsEditingPublicUrl(false);
+                }}
+                saving={busy === "public-url"}
               />
               <div className="mt-6 flex flex-wrap gap-2">
                 <Button
@@ -806,8 +889,21 @@ export default function MCPConnectPage() {
                 id="mcp-url-guide"
                 url={effectiveMcpUrl}
                 onCopy={() => void copyMcpUrl()}
-                publicBaseUrl={publicBaseUrl}
-                setPublicBaseUrl={setPublicBaseUrl}
+                configuredPublicBaseUrl={connection?.public_base_url || ""}
+                effectivePublicBaseUrl={connection?.effective_public_base_url || ""}
+                publicUrlDraft={publicUrlDraft}
+                setPublicUrlDraft={setPublicUrlDraft}
+                isEditing={isEditingPublicUrl}
+                onEdit={() => {
+                  setPublicUrlDraft(connection?.public_base_url || "");
+                  setIsEditingPublicUrl(true);
+                }}
+                onSave={() => void savePublicUrl()}
+                onCancel={() => {
+                  setPublicUrlDraft(connection?.public_base_url || "");
+                  setIsEditingPublicUrl(false);
+                }}
+                saving={busy === "public-url"}
               />
               <div className="mt-6 flex flex-wrap gap-2">
                 <Button

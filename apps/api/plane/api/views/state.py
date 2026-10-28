@@ -14,7 +14,8 @@ from drf_spectacular.utils import OpenApiResponse, OpenApiRequest
 # Module imports
 from plane.api.serializers import StateSerializer
 from plane.app.permissions import ProjectAdminPermission, ProjectEntityPermission
-from plane.db.models import Issue, State, WorkflowVersionState
+from plane.db.models import State
+from plane.services.state import get_state_delete_blocker
 from .base import BaseAPIView
 from plane.utils.openapi import (
     state_docs,
@@ -241,26 +242,9 @@ class StateDetailAPIEndpoint(BaseAPIView):
         """
         state = State.objects.get(is_triage=False, pk=state_id, project_id=project_id, workspace__slug=slug)
 
-        if state.default:
-            return Response(
-                {"error": "Default state cannot be deleted"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Check for any issues in the state
-        issue_exist = Issue.objects.filter(state=state_id).exists()
-
-        if issue_exist:
-            return Response(
-                {"error": "The state is not empty, only empty states can be deleted"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if WorkflowVersionState.objects.filter(state_id=state_id).exists():
-            return Response(
-                {"error": "The state is used by a workflow version and cannot be deleted"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        blocker = get_state_delete_blocker(state)
+        if blocker:
+            return Response(blocker, status=status.HTTP_400_BAD_REQUEST)
 
         state.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

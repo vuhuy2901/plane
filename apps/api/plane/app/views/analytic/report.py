@@ -224,7 +224,7 @@ class WorkspaceReportEndpoint(BaseAPIView):
         totals.update(active_members=active_members, active_cycles=active_cycles)
 
         states = list(
-            issues.values("state_id", "state__name", "state__group", "state__color")
+            issues.values("state_id", "state__name", "state__project__name", "state__group", "state__color")
             .annotate(count=Count("id"))
             .order_by("state__group", "state__name")
         )

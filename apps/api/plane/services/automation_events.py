@@ -4,14 +4,14 @@ from django.db import transaction
 from django.db.models import Q
 
 from plane.db.models import Issue, IssueRelation, ProjectAutomationEvent
-from plane.services.automation_runtime import capture_context, snapshot
+from plane.services.automation_runtime import capture_context, schedule_event_delivery, snapshot
 
 
 def comment_created(comment):
     context = capture_context(comment.project_id)
     if not context or comment.issue.project_id != comment.project_id:
         return
-    ProjectAutomationEvent.objects.get_or_create(
+    event, created = ProjectAutomationEvent.objects.get_or_create(
         deduplication_key=f"comment:{comment.id}",
         defaults={
             "project": comment.project,
@@ -26,6 +26,8 @@ def comment_created(comment):
             },
         },
     )
+    if created:
+        schedule_event_delivery(event)
 
 
 @transaction.atomic
@@ -71,7 +73,7 @@ def relation_created(relation):
     foreign = source.project_id != target.project_id
     if foreign:
         metadata["skip_reason"] = "Cross-project relationships are not supported by Automation."
-    ProjectAutomationEvent.objects.get_or_create(
+    event, created = ProjectAutomationEvent.objects.get_or_create(
         deduplication_key=f"relation:{relation.id}",
         defaults={
             "project": target.project,
@@ -82,3 +84,5 @@ def relation_created(relation):
             "context": metadata,
         },
     )
+    if created:
+        schedule_event_delivery(event)

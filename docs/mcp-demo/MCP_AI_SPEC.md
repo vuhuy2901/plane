@@ -158,7 +158,7 @@ Log `Invalid Host header` nghĩa là thiếu hostname trong `MCP_ALLOWED_HOSTS`.
 
 ### URL vẫn hiển thị `localhost`
 
-Đặt `MCP_PUBLIC_BASE_URL` bằng HTTPS hostname, recreate API container, rồi regenerate connection. URL cũ không tự thay đổi.
+Đặt `MCP_PUBLIC_BASE_URL` bằng HTTPS hostname và recreate API container để đổi mặc định toàn server. Hoặc vào **Dashboard → Edit Public URL** để lưu hostname riêng cho connection hiện tại; thao tác này cập nhật URL ngay mà không regenerate token hay credentials.
 
 ### URL vẫn hiển thị IP Radmin VPN
 

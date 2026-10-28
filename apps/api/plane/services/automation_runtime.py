@@ -6,6 +6,7 @@ from contextvars import ContextVar
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.db import transaction, connection
 from django.db import OperationalError
 from django.db.models import F
@@ -35,6 +36,23 @@ logger = logging.getLogger("plane.worker")
 
 def module_enabled():
     return os.environ.get("PROJECT_AUTOMATIONS_ENABLED", "1") == "1"
+
+
+def schedule_event_delivery(event):
+    """Deliver request-created events in local eager mode where no Beat process exists."""
+
+    if event is None or not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+        return event
+
+    event_id = str(event.id)
+
+    def deliver():
+        from plane.bgtasks.project_automation_task import run_project_automation
+
+        run_project_automation.delay(event_id)
+
+    transaction.on_commit(deliver)
+    return event
 
 
 def snapshot(issue, fields=None):
@@ -106,18 +124,20 @@ def emit_event(issue, context):
                 triggers.append("SUBTASK_COMPLETED")
     if not triggers:
         return None
-    return ProjectAutomationEvent.objects.create(
-        project=issue.project,
-        issue=issue,
-        snapshot=after,
-        before_snapshot=before,
-        context={
-            "actor_id": str(issue.updated_by_id or issue.created_by_id)
-            if (issue.updated_by_id or issue.created_by_id)
-            else None
-        },
-        candidates=context["candidates"],
-        triggers=triggers,
+    return schedule_event_delivery(
+        ProjectAutomationEvent.objects.create(
+            project=issue.project,
+            issue=issue,
+            snapshot=after,
+            before_snapshot=before,
+            context={
+                "actor_id": str(issue.updated_by_id or issue.created_by_id)
+                if (issue.updated_by_id or issue.created_by_id)
+                else None
+            },
+            candidates=context["candidates"],
+            triggers=triggers,
+        )
     )
 
 

@@ -15,7 +15,7 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import State
+from plane.db.models import State, Workflow, WorkflowVersion, WorkflowVersionState
 from plane.tests.factories import ProjectFactory, ProjectMemberFactory, UserFactory, WorkspaceMemberFactory
 
 ADMIN, MEMBER, GUEST = 20, 15, 5
@@ -92,3 +92,34 @@ class TestStateWriteAdminScope:
         response = session_client.post(f"{_state_url(workspace.slug, project.id, uuid4())}mark-default/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert list(State.objects.filter(project=project, default=True)) == [default_state]
+
+    def test_empty_state_can_be_deleted(self, session_client, workspace, project, state):
+        response = session_client.delete(_state_url(workspace.slug, project.id, state.id))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not State.objects.filter(pk=state.id).exists()
+
+    def test_state_used_by_workflow_returns_specific_blocker(self, session_client, workspace, project, state):
+        workflow = Workflow.objects.create(project=project, name="Epic workflow")
+        version = WorkflowVersion.objects.create(project=project, workflow=workflow, version=1)
+        WorkflowVersionState.objects.create(
+            project=project,
+            workflow_version=version,
+            state=state,
+            name=state.name,
+            color=state.color,
+            group=state.group,
+        )
+
+        response = session_client.delete(_state_url(workspace.slug, project.id, state.id))
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["code"] == "STATE_IN_WORKFLOW"
+        assert response.data["details"]["workflows"] == [
+            {
+                "id": str(workflow.id),
+                "name": workflow.name,
+                "version_count": 1,
+            }
+        ]
+        assert State.objects.filter(pk=state.id).exists()

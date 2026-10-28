@@ -1,6 +1,8 @@
 from datetime import timedelta
 
 import pytest
+from django.db import transaction
+from django.test import override_settings
 from django.utils import timezone
 
 from plane.db.models import (
@@ -90,6 +92,34 @@ def test_create_action_does_not_require_initial_state(runtime):
         ],
     }
     assert "state_id" not in validate_definition(project, definition)["actions"][0]
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+def test_local_eager_mode_delivers_event_after_transaction_commit(
+    runtime, mocker, django_capture_on_commit_callbacks
+):
+    project, actor, issue = runtime
+    ProjectAutomationRule.objects.create(
+        project=project,
+        enabled=True,
+        enabled_at=timezone.now(),
+        execution_actor=actor,
+        definition={
+            "name": "Local delivery",
+            "trigger": "created",
+            "conditions": [],
+            "actions": [{"type": "change_priority", "priority": "high"}],
+        },
+    )
+    delay = mocker.patch("plane.bgtasks.project_automation_task.run_project_automation.delay")
+
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        with transaction.atomic():
+            event = emit_event(issue, capture_context(project.id))
+            delay.assert_not_called()
+
+    assert len(callbacks) == 1
+    delay.assert_called_once_with(str(event.id))
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.django_db]

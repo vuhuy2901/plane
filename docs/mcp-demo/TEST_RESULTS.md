@@ -10,6 +10,13 @@ The existing MCP tests continue to cover tool registration, schemas, payload map
 
 ## Verification log
 
+- `docker compose -f docker-compose-test.yml run --rm --build api-tests pytest plane/tests/unit/mcp/test_connections.py -q`
+  - Result: 11 passed, including per-connection public URL persistence/update, token and credential stability, invalid URL rejection, connection isolation, expired/revoked behavior, and MCP initialization.
+- Live ngrok protocol probe through `https://geopolitical-anthropomorphously-rosena.ngrok-free.dev`
+  - Result: MCP `initialize` succeeded and `tools/list` returned 14 tools. The ephemeral connection was deleted after the probe.
+- `python manage.py migrate`
+  - Result: migration `db.0135_mcp_connection_public_base_url` applied successfully to the local development database.
+
 - `docker compose -f docker-compose-local.yml exec -T api pytest plane/tests/unit/mcp -q`
   - Result: 19 passed in the initial portal verification run; the project-picker regression test also passes in the focused connection suite.
 - `docker compose -f docker-compose-local.yml exec -T api python manage.py makemigrations --check --dry-run`
@@ -39,10 +46,10 @@ The native browser automation bridge was unavailable during verification, so no 
 
 On 27 October 2026, the public Cloudflare tunnel initially reached the MCP application but `initialize` was rejected because the tunnel hostname was absent from `MCP_ALLOWED_HOSTS`. A probe with `Origin: https://chatgpt.com` then returned HTTP 403 because that origin was absent from `MCP_ALLOWED_ORIGINS`. After adding both exact values and recreating the API container, an ephemeral test connection returned HTTP 200 for `initialize` and HTTP 200 with 14 tools for `tools/list` through the public HTTPS tunnel. The ephemeral connection was revoked after the test. This does not assert that ChatGPT's own connection setup has been retried successfully.
 
+Later on 27 October 2026, the configured default and allowlists were moved to the fixed ngrok hostname. A fresh ephemeral personal connection completed the full MCP handshake and discovered 14 tools through that ngrok URL. This verifies public routing and MCP protocol behavior, but not ChatGPT workspace policy or UI setup.
+
 ## Manual checks still required for a deployed demo
 
-- Public HTTPS routing through the approved tunnel hostname
-- MCP Inspector against that public generated URL
 - Real task creation and retrieval in the disposable project
 - Actual ChatGPT plan access, tool scan, and invocation
 - Desktop and mobile review in the target browsers

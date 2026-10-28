@@ -18,7 +18,8 @@ from rest_framework import status
 from .. import BaseViewSet, BaseAPIView
 from plane.app.serializers import StateSerializer
 from plane.app.permissions import ROLE, allow_permission
-from plane.db.models import State, Issue, WorkflowVersionState
+from plane.db.models import State
+from plane.services.state import get_state_delete_blocker
 from plane.utils.cache import invalidate_cache
 
 
@@ -119,26 +120,9 @@ class StateViewSet(BaseViewSet):
     def destroy(self, request, slug, project_id, pk):
         state = State.objects.get(is_triage=False, pk=pk, project_id=project_id, workspace__slug=slug)
 
-        if state.default:
-            return Response(
-                {"error": "Default state cannot be deleted"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Check for any issues in the state
-        issue_exist = Issue.objects.filter(state=pk).exists()
-
-        if issue_exist:
-            return Response(
-                {"error": "The state is not empty, only empty states can be deleted"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if WorkflowVersionState.objects.filter(state_id=pk).exists():
-            return Response(
-                {"error": "The state is used by a workflow version and cannot be deleted"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        blocker = get_state_delete_blocker(state)
+        if blocker:
+            return Response(blocker, status=status.HTTP_400_BAD_REQUEST)
 
         state.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

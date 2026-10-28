@@ -80,6 +80,7 @@ class MCPConnection(BaseModel):
     token_hash = models.CharField(max_length=64, unique=True, db_index=True)
     encrypted_api_key = models.TextField()
     plane_server_url = models.URLField(max_length=500)
+    public_base_url = models.URLField(max_length=500, null=True, blank=True)
     workspace = models.ForeignKey("db.Workspace", related_name="mcp_connections", on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="mcp_connections", on_delete=models.CASCADE)
     expires_at = models.DateTimeField()

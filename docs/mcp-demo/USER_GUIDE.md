@@ -15,8 +15,11 @@
 3. Enter the workspace slug from the Plane workspace URL.
 4. Paste the Personal API Key.
 5. Select **Test connection**.
-6. After validation succeeds, select **Generate MCP connection**.
-7. Copy the Personal MCP URL from the dashboard.
+6. Optionally enter an HTTPS ngrok, Cloudflare Tunnel, or custom domain in **Public Tunnel URL**.
+7. After validation succeeds, select **Generate MCP connection**.
+8. Copy the Personal MCP URL from the dashboard.
+
+To change a tunnel later, open **Dashboard**, select **Edit Public URL**, then **Save**. The Personal MCP URL updates immediately and remains after refresh. The connection token and Plane credential do not change; update the server URL in the MCP client that was using the previous hostname.
 
 The saved API key is not displayed again. Treat the Personal MCP URL as a password because anyone holding it can use the connected Plane permissions until the connection expires or is revoked.
 

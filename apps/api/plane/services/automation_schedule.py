@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from plane.db.models import Issue, ProjectAutomationRule, ProjectAutomationEvent
 from plane.services.automation_config import BATCH_SIZE, RETENTION_DAYS
-from plane.services.automation_runtime import module_enabled, snapshot, matches_conditions
+from plane.services.automation_runtime import module_enabled, schedule_event_delivery, snapshot, matches_conditions
 
 
 def occurrence(options, now):
@@ -68,7 +68,7 @@ def dispatch_schedules(now=None):
                     event_snapshot = snapshot(issue)
                     event = SimpleNamespace(snapshot=event_snapshot, created_at=due, issue_id=issue.id)
                     if matches_conditions({"conditions": options.get("filters", [])}, event, rule.project):
-                        ProjectAutomationEvent.objects.get_or_create(
+                        event, created = ProjectAutomationEvent.objects.get_or_create(
                             deduplication_key=f"schedule:{rule.id}:{rule.revision}:{key}:{issue.id}",
                             defaults={
                                 "project": rule.project,
@@ -79,6 +79,8 @@ def dispatch_schedules(now=None):
                                 "context": {"scheduled_for": key, "timezone": options["timezone"]},
                             },
                         )
+                        if created:
+                            schedule_event_delivery(event)
                     cursor["last_id"] = str(issue.id)
                 cursor["complete"] = len(items) < BATCH_SIZE
             ProjectAutomationRule.objects.filter(pk=rule.pk).update(schedule_cursor=cursor, updated_at=now)

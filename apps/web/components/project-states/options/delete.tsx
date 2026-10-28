@@ -18,6 +18,7 @@ import type { IState, TStateOperationsCallbacks } from "@plane/types";
 import { cn } from "@plane/utils";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { getStateDeleteErrorMessage } from "../delete-error";
 
 type TStateDelete = {
   totalStates: number;
@@ -35,7 +36,7 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
   const [isDeleteModal, setIsDeleteModal] = useState(false);
   const [isDelete, setIsDelete] = useState(false);
   // derived values
-  const isDeleteDisabled = state.default ? true : totalStates === 1 ? true : false;
+  const isDeleteDisabled = state.default || totalStates === 1;
 
   const handleDeleteState = async () => {
     if (isDeleteDisabled) return;
@@ -46,21 +47,11 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
       await deleteStateCallback(state.id);
       setIsDelete(false);
     } catch (error) {
-      const errorStatus = error as { status: number; data: { error: string } };
-      if (errorStatus.status === 400) {
-        setToast({
-          type: "error",
-          title: "Error!",
-          message:
-            "This state contains some work items within it, please move them to some other state to delete this state.",
-        });
-      } else {
-        setToast({
-          type: "error",
-          title: "Error!",
-          message: "State could not be deleted. Please try again.",
-        });
-      }
+      setToast({
+        type: "error",
+        title: "State cannot be deleted",
+        message: getStateDeleteErrorMessage(error),
+      });
       setIsDelete(false);
     }
   };

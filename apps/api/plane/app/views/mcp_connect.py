@@ -20,7 +20,9 @@ from plane.db.models import APIToken, MCPConnection, Project, Workspace, Workspa
 from plane.mcp.activity import EVENT_LABELS, record_event
 from plane.mcp.connections import (
     CONNECTION_COOKIE_NAME,
+    build_personal_mcp_url,
     create_connection,
+    normalize_public_base_url,
     normalize_server_url,
     resolve_connection,
 )
@@ -35,6 +37,18 @@ def _user_name(user) -> str:
 def _public_base_url(request) -> str:
     configured = getattr(settings, "WEB_URL", "") or getattr(settings, "APP_BASE_URL", "")
     return normalize_server_url(configured or request.build_absolute_uri("/"))
+
+
+def _default_mcp_public_base_url(request) -> str:
+    configured = getattr(settings, "MCP_PUBLIC_BASE_URL", "").strip()
+    if configured:
+        return normalize_public_base_url(configured)
+    return normalize_server_url(request.build_absolute_uri("/"))
+
+
+def _requested_public_base_url(request) -> str | None:
+    value = str(request.data.get("public_base_url", "")).strip()
+    return normalize_public_base_url(value) if value else None
 
 
 def _validate_local_server(request, value: str) -> str:
@@ -72,6 +86,12 @@ def _validate_credentials(request):
         server_url = _validate_local_server(request, server_url)
     except ValueError as exc:
         return None, Response({"error": str(exc), "code": "invalid_server"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        public_base_url = _requested_public_base_url(request)
+    except ValueError as exc:
+        return None, Response(
+            {"error": str(exc), "code": "invalid_public_url"}, status=status.HTTP_400_BAD_REQUEST
+        )
 
     try:
         user, _ = APIKeyAuthentication().validate_api_token(api_key)
@@ -98,7 +118,13 @@ def _validate_credentials(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    return {"server_url": server_url, "workspace": workspace, "user": user, "api_key": api_key}, None
+    return {
+        "server_url": server_url,
+        "public_base_url": public_base_url,
+        "workspace": workspace,
+        "user": user,
+        "api_key": api_key,
+    }, None
 
 
 def _raw_cookie_token(request) -> str:
@@ -106,21 +132,23 @@ def _raw_cookie_token(request) -> str:
 
 
 def _connection_payload(request, connection: MCPConnection, raw_token: str) -> dict:
-    public_mcp_base_url = getattr(settings, "MCP_PUBLIC_BASE_URL", "")
-    mcp_path = f"/mcp/c/{raw_token}"
-    mcp_url = (
-        f"{normalize_server_url(public_mcp_base_url)}{mcp_path}"
-        if public_mcp_base_url
-        else request.build_absolute_uri(mcp_path)
-    )
+    effective_public_base_url = connection.public_base_url or _default_mcp_public_base_url(request)
+    if connection.revoked_at is not None:
+        connection_status = "revoked"
+    elif connection.expires_at <= timezone.now():
+        connection_status = "expired"
+    else:
+        connection_status = "connected"
     return {
         "connected": connection.is_available,
-        "status": "connected" if connection.is_available else "disconnected",
+        "status": connection_status,
         "user": {"name": _user_name(connection.user), "email": connection.user.email},
         "workspace": {"name": connection.workspace.name, "slug": connection.workspace.slug},
         "plane_server_url": connection.plane_server_url,
         "mcp_server_status": "available" if connection.is_available else "unavailable",
-        "mcp_url": mcp_url,
+        "public_base_url": connection.public_base_url or "",
+        "effective_public_base_url": effective_public_base_url,
+        "mcp_url": build_personal_mcp_url(effective_public_base_url, raw_token),
         "expires_at": connection.expires_at.isoformat(),
         "last_mcp_request_at": connection.last_mcp_request_at.isoformat() if connection.last_mcp_request_at else None,
     }
@@ -166,6 +194,7 @@ class MCPConnectionEndpoint(PublicMCPAPIView):
         connection, raw_token = create_connection(
             api_key=validated["api_key"],
             plane_server_url=validated["server_url"],
+            public_base_url=validated["public_base_url"],
             workspace=validated["workspace"],
             user=validated["user"],
         )
@@ -173,11 +202,26 @@ class MCPConnectionEndpoint(PublicMCPAPIView):
         _set_connection_cookie(response, request, raw_token, connection.expires_at)
         return response
 
+    def patch(self, request):
+        raw_token = _raw_cookie_token(request)
+        resolved = resolve_connection(raw_token, require_available=False)
+        if resolved is None:
+            return Response({"error": "The connection was not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            public_base_url = _requested_public_base_url(request)
+        except ValueError as exc:
+            return Response(
+                {"error": str(exc), "code": "invalid_public_url"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        resolved.connection.public_base_url = public_base_url
+        resolved.connection.save(update_fields=["public_base_url", "updated_at"])
+        return Response(_connection_payload(request, resolved.connection, raw_token))
+
 
 class MCPConnectionStatusEndpoint(PublicMCPAPIView):
     def get(self, request):
         raw_token = _raw_cookie_token(request)
-        resolved = resolve_connection(raw_token)
+        resolved = resolve_connection(raw_token, require_available=False)
         if resolved is None:
             return Response(
                 {"connected": False, "status": "disconnected", "plane_server_url": _public_base_url(request)}
@@ -209,6 +253,7 @@ class MCPConnectionRegenerateEndpoint(PublicMCPAPIView):
         connection, new_token = create_connection(
             api_key=resolved.api_key,
             plane_server_url=old_connection.plane_server_url,
+            public_base_url=old_connection.public_base_url,
             workspace=old_connection.workspace,
             user=old_connection.user,
         )

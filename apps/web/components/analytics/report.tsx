@@ -51,14 +51,17 @@ export function WorkspaceReportProvider({ children }: { children: ReactNode }) {
         count_mode: countMode,
         ...(selectedProjects.length ? { project_ids: selectedProjects.join(",") } : {}),
       }),
-    { keepPreviousData: true }
+    // A filter change represents a different report. Rendering the previous
+    // response while the new request is in flight makes old numbers look like
+    // they belong to the newly selected filters.
+    { keepPreviousData: false }
   );
   const contextValue = useMemo(() => ({ slug, ...report }), [slug, report]);
 
   return <WorkspaceReportContext.Provider value={contextValue}>{children}</WorkspaceReportContext.Provider>;
 }
 
-function useWorkspaceReport() {
+export function useWorkspaceReport() {
   const context = useContext(WorkspaceReportContext);
   if (!context) throw new Error("WorkspaceReportProvider is required for analytics reporting");
   return context;
@@ -159,6 +162,30 @@ function Distribution({
         </div>
       ))}
     </div>
+  );
+}
+
+function StateDistribution({ rows, total }: { rows: IWorkspaceReport["states"]; total: number }) {
+  const nameCounts = rows.reduce<Record<string, number>>((counts, row) => {
+    const name = row.state__name ?? "No state";
+    counts[name] = (counts[name] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  return (
+    <Distribution
+      total={total}
+      rows={rows.map((row) => {
+        const name = row.state__name ?? "No state";
+        const projectName = row.state__project__name;
+        return {
+          key: row.state_id ?? `${row.state__group}-none`,
+          label: nameCounts[name] > 1 && projectName ? `${name} (${projectName})` : name,
+          count: row.count,
+          color: row.state__color,
+        };
+      })}
+    />
   );
 }
 
@@ -284,15 +311,7 @@ export const WorkspaceReport = observer(function WorkspaceReport() {
           />
         </Section>
         <Section title="Work items by state">
-          <Distribution
-            total={data.totals.total}
-            rows={data.states.map((row) => ({
-              key: row.state_id ?? `${row.state__group}-none`,
-              label: row.state__name ?? "No state",
-              count: row.count,
-              color: row.state__color,
-            }))}
-          />
+          <StateDistribution rows={data.states} total={data.totals.total} />
         </Section>
         <Section title="Work items by priority">
           <Distribution

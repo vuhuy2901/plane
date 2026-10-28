@@ -69,6 +69,10 @@ Getting started with Plane is simple. Choose the setup that works best for you:
 
 See [CONTRIBUTING](./CONTRIBUTING.md)
 
+### Plane MCP Connect
+
+This fork includes a web portal for creating revocable Personal MCP URLs and connecting Plane to ChatGPT or another MCP client. See the [complete Vietnamese setup and usage guide](./docs/mcp-demo/HUONG_DAN_SU_DUNG.md) or the shorter [English user guide](./docs/mcp-demo/USER_GUIDE.md).
+
 ## ⚙️ Built with
 
 [![React Router](https://img.shields.io/badge/-React%20Router-CA4245?logo=react-router&style=for-the-badge&logoColor=white)](https://reactrouter.com/)

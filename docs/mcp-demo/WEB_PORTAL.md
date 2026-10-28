@@ -22,7 +22,7 @@ The portal does not create a second MCP server. Personal URLs are routed to the 
 - The Plane Personal API Key is encrypted with Fernet using key material derived from Django `SECRET_KEY` and a portal-specific context string.
 - The browser receives the bearer URL once and keeps the active token in an HttpOnly, SameSite=Strict cookie. It is never written to localStorage.
 - API keys and personal MCP URLs are excluded from activity events.
-- Connections expire after `MCP_CONNECTION_TTL_HOURS`, which defaults to 168 hours, and can be revoked or regenerated immediately.
+- Connections expire after `MCP_CONNECTION_TTL_HOURS`, which defaults to 168 hours, and can be revoked or regenerated immediately. Each connection may store its own public base URL; changing it never rotates the connection token or Plane credential.
 
 Changing Django `SECRET_KEY` invalidates encrypted credentials. Recreate demo connections after such a rotation.
 
@@ -60,7 +60,7 @@ cloudflared tunnel run --url http://localhost:80 plane-mcp-demo
 
 Use a named tunnel configuration for repeatable demonstrations. Set Plane's public `WEB_URL` to the HTTPS hostname and add the exact hostname to `MCP_ALLOWED_HOSTS`. If the client sends an `Origin` header, add that exact origin to `MCP_ALLOWED_ORIGINS` (for ChatGPT web, `https://chatgpt.com`). Keep the local origins needed by your web client in the list as well. Recreate the API container after changing its `.env`; a plain `docker compose restart` retains the old environment. Create new personal URLs after the public hostname is active.
 
-When Plane itself remains at localhost, set `MCP_PUBLIC_BASE_URL` to the tunnel's HTTPS origin. The portal will show and copy the public MCP URL while keeping the local Plane server URL unchanged. Update this setting whenever a quick tunnel gets a new hostname.
+When Plane itself remains at localhost, set `MCP_PUBLIC_BASE_URL` to the tunnel's HTTPS origin as the server-wide default. A user can override that default while creating a connection or later through **Dashboard → Edit Public URL**. The saved per-connection value takes precedence and survives refreshes. Clearing it returns the connection to the server default. The generated URL is always `{public-base}/mcp/c/{connection-token}`.
 
 For the local development stack, the API service already runs `plane.asgi:application` with Uvicorn. A separate host `manage.py runserver` on port 8000 can intercept requests and does not route `/mcp/c/*` to MCP. Stop any duplicate host server, then send the tunnel to the API service's port 8000. A quick tunnel hostname changes when the tunnel is restarted, so update the exact host allowlist and recreate the API service each time.
 

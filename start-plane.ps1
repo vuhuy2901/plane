@@ -10,7 +10,7 @@ Write-Host "                KHOI DONG DU AN PLANE                     " -Foregro
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Kiem tra Docker & khoi dong Database
-Write-Host "[1/3] Kiem tra Docker Daemon..." -ForegroundColor Yellow
+Write-Host "[1/4] Kiem tra Docker Daemon..." -ForegroundColor Yellow
 $dockerReady = $false
 try {
     $null = docker info 2>&1
@@ -29,14 +29,24 @@ if ($dockerReady) {
 }
 
 # 2. Khoi dong Backend API (Port 8000)
-Write-Host "`n[2/3] Khoi dong Backend API (Port 8000)..." -ForegroundColor Yellow
+Write-Host "`n[2/4] Khoi dong Backend API (Port 8000)..." -ForegroundColor Yellow
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location -LiteralPath '$Root\apps\api'; .\start-core.ps1" -WindowStyle Normal
 Write-Host "-> Da mo cua so PowerShell khoi chay Backend API tai: http://localhost:8000" -ForegroundColor Green
 
 # 3. Khoi dong Frontend Web (Port 3000, 3001)
-Write-Host "`n[3/3] Khoi dong Frontend Web Server (Port 3000)..." -ForegroundColor Yellow
+Write-Host "`n[3/4] Khoi dong Frontend Web Server (Port 3000)..." -ForegroundColor Yellow
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location -LiteralPath '$Root'; pnpm dev" -WindowStyle Normal
 Write-Host "-> Da mo cua so PowerShell khoi chay Frontend tai: http://localhost:3000" -ForegroundColor Green
+
+# 4. Khoi dong Ngrok Tunnel cho MCP & Remote API
+Write-Host "`n[4/4] Khoi dong Ngrok Tunnel..." -ForegroundColor Yellow
+$ngrokProc = Get-Process ngrok -ErrorAction SilentlyContinue
+if (-not $ngrokProc) {
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location -LiteralPath '$Root'; .\start-ngrok.ps1" -WindowStyle Normal
+    Write-Host "-> Da mo cua so PowerShell khoi chay Ngrok Tunnel" -ForegroundColor Green
+} else {
+    Write-Host "-> Ngrok Tunnel da dang chay san." -ForegroundColor Green
+}
 
 Write-Host "`n==========================================================" -ForegroundColor Cyan
 Write-Host "                 CAC DUONG DAN DICH VU                    " -ForegroundColor Cyan
@@ -44,4 +54,6 @@ Write-Host "==========================================================" -Foregro
 Write-Host "  - Web App:      http://localhost:3000" -ForegroundColor Green
 Write-Host "  - Admin Panel:  http://localhost:3001" -ForegroundColor Green
 Write-Host "  - Backend API:  http://localhost:8000" -ForegroundColor Green
+Write-Host "  - MCP Portal:   http://localhost:3000/mcp-connect" -ForegroundColor Green
+Write-Host "  - Ngrok Tunnel: https://geopolitical-anthropomorphously-rosena.ngrok-free.dev" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan

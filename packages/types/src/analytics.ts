@@ -57,6 +57,7 @@ export interface AnalyticsTab {
 export type TAnalyticsFilterParams = {
   date_filter?: string;
   project_ids?: string;
+  count_mode?: TAnalyticsCountMode;
   cycle_id?: string;
   module_id?: string;
 };
@@ -107,6 +108,7 @@ export interface IWorkspaceReport {
   states: {
     state_id: string | null;
     state__name: string | null;
+    state__project__name: string | null;
     state__group: string | null;
     state__color: string | null;
     count: number;

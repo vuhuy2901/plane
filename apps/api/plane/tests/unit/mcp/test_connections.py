@@ -14,7 +14,14 @@ from django.utils import timezone
 from plane.db.models import MCPConnection, Project
 from plane.mcp import server
 from plane.app.views.mcp_connect import _PortalToolContext
-from plane.mcp.connections import create_connection, decrypt_api_key, resolve_connection, token_digest
+from plane.mcp.connections import (
+    build_personal_mcp_url,
+    create_connection,
+    decrypt_api_key,
+    normalize_public_base_url,
+    resolve_connection,
+    token_digest,
+)
 
 
 @pytest.mark.django_db
@@ -82,6 +89,118 @@ def test_connection_api_returns_configured_public_mcp_url(api_client, api_token,
 
 
 @pytest.mark.django_db
+@override_settings(WEB_URL="http://testserver", MCP_PUBLIC_BASE_URL="https://default.example.com")
+def test_connection_public_url_is_saved_updated_and_survives_refresh(api_client, api_token, workspace):
+    create_response = api_client.post(
+        "/api/mcp-connect/connections/",
+        {
+            "plane_server_url": "http://testserver",
+            "public_base_url": "https://old.example.com/mcp/",
+            "workspace_slug": workspace.slug,
+            "api_key": api_token.token,
+        },
+        format="json",
+    )
+    assert create_response.status_code == 201
+    raw_token = create_response.json()["mcp_url"].rsplit("/", 1)[-1]
+    connection = MCPConnection.objects.get()
+    original_hash = connection.token_hash
+    original_credential = connection.encrypted_api_key
+    assert connection.public_base_url == "https://old.example.com"
+    assert create_response.json()["mcp_url"] == f"https://old.example.com/mcp/c/{raw_token}"
+
+    update_response = api_client.patch(
+        "/api/mcp-connect/connections/",
+        {"public_base_url": "https://new.example.com/"},
+        format="json",
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["mcp_url"] == f"https://new.example.com/mcp/c/{raw_token}"
+    connection.refresh_from_db()
+    assert connection.token_hash == original_hash
+    assert connection.encrypted_api_key == original_credential
+    assert connection.public_base_url == "https://new.example.com"
+
+    status_response = api_client.get("/api/mcp-connect/status/")
+    assert status_response.json()["public_base_url"] == "https://new.example.com"
+    assert status_response.json()["mcp_url"] == f"https://new.example.com/mcp/c/{raw_token}"
+
+
+@pytest.mark.django_db
+@override_settings(WEB_URL="http://testserver")
+def test_invalid_public_url_does_not_change_connection(api_client, api_token, workspace):
+    create_response = api_client.post(
+        "/api/mcp-connect/connections/",
+        {
+            "plane_server_url": "http://testserver",
+            "public_base_url": "https://valid.example.com",
+            "workspace_slug": workspace.slug,
+            "api_key": api_token.token,
+        },
+        format="json",
+    )
+    assert create_response.status_code == 201
+
+    update_response = api_client.patch(
+        "/api/mcp-connect/connections/",
+        {"public_base_url": "http://127.0.0.1:8000/?token=unsafe"},
+        format="json",
+    )
+    assert update_response.status_code == 400
+    assert update_response.json()["code"] == "invalid_public_url"
+    assert MCPConnection.objects.get().public_base_url == "https://valid.example.com"
+
+
+@pytest.mark.django_db
+@override_settings(WEB_URL="http://testserver")
+def test_expired_or_revoked_connection_url_update_does_not_reactivate(api_client, api_token, workspace):
+    payload = {
+        "plane_server_url": "http://testserver",
+        "workspace_slug": workspace.slug,
+        "api_key": api_token.token,
+    }
+    assert api_client.post("/api/mcp-connect/connections/", payload, format="json").status_code == 201
+    connection = MCPConnection.objects.get()
+    original_hash = connection.token_hash
+    connection.expires_at = timezone.now() - timedelta(seconds=1)
+    connection.save(update_fields=["expires_at", "updated_at"])
+
+    expired_response = api_client.patch(
+        "/api/mcp-connect/connections/",
+        {"public_base_url": "https://expired.example.com"},
+        format="json",
+    )
+    assert expired_response.status_code == 200
+    assert expired_response.json()["status"] == "expired"
+    assert expired_response.json()["connected"] is False
+    connection.refresh_from_db()
+    assert connection.token_hash == original_hash
+
+    connection.revoked_at = timezone.now()
+    connection.save(update_fields=["revoked_at", "updated_at"])
+    revoked_response = api_client.patch(
+        "/api/mcp-connect/connections/",
+        {"public_base_url": "https://revoked.example.com"},
+        format="json",
+    )
+    assert revoked_response.status_code == 200
+    assert revoked_response.json()["status"] == "revoked"
+    assert revoked_response.json()["connected"] is False
+
+
+@override_settings(DEBUG=False, MCP_ALLOW_LOCAL_PUBLIC_URL=False)
+def test_public_url_normalization_and_safety_rules():
+    assert normalize_public_base_url("https://Example.COM/mcp/") == "https://example.com"
+    assert build_personal_mcp_url("https://example.com/mcp", "token") == "https://example.com/mcp/c/token"
+    with pytest.raises(ValueError):
+        normalize_public_base_url("http://localhost:8000")
+    with pytest.raises(ValueError):
+        normalize_public_base_url("https://127.0.0.1:8000")
+    with pytest.raises(ValueError):
+        normalize_public_base_url("https://user:secret@example.com")
+
+
+@pytest.mark.django_db
 @override_settings(WEB_URL="http://testserver")
 def test_connected_workspace_projects_are_listed_for_demo_picker(api_client, api_token, workspace):
     project = Project.objects.create(name="Demo Project", identifier="DEMO", workspace=workspace)
@@ -105,18 +224,24 @@ def test_connections_keep_credentials_isolated_and_expire(api_token, workspace, 
     first, first_token = create_connection(
         api_key=api_token.token,
         plane_server_url="http://testserver",
+        public_base_url="https://first.example.com",
         workspace=workspace,
         user=create_user,
     )
     second, second_token = create_connection(
         api_key="plane_api_second",
         plane_server_url="http://testserver",
+        public_base_url="https://second.example.com",
         workspace=workspace,
         user=create_user,
     )
     assert first.token_hash != second.token_hash
     assert resolve_connection(first_token).api_key == api_token.token
     assert resolve_connection(second_token).api_key == "plane_api_second"
+    first.public_base_url = "https://first-updated.example.com"
+    first.save(update_fields=["public_base_url", "updated_at"])
+    second.refresh_from_db()
+    assert second.public_base_url == "https://second.example.com"
 
     first.expires_at = timezone.now() - timedelta(seconds=1)
     first.save(update_fields=["expires_at", "updated_at"])
