@@ -15,7 +15,7 @@ import type {
   TriggerOptions,
 } from "@/services/automation.service";
 import { changeConditionField, changeConditionOperator, persistRuleDraft } from "./rule-form";
-import { EvaluationDetails, RuleDryRun, RuleSummary } from "./rule-feedback";
+import { EvaluationDetails, RuleSummary } from "./rule-feedback";
 import { automationRulePaths, loadAutomationEditor } from "./rule-routing";
 import type { AutomationEditorOptions } from "./rule-routing";
 import {
@@ -1190,16 +1190,6 @@ function ProjectAutomationRulesForProject({
                       Boolean(draft)
                     )}
                   </div>
-                  <RuleDryRun
-                    key={`${rule.id}:${rule.revision}`}
-                    service={service}
-                    workspace={w}
-                    project={p}
-                    rule={rule}
-                    resources={resources}
-                    resourcesReady={resourcesStatus === "ready"}
-                    hasDraft={Boolean(draft)}
-                  />
                 </article>
               ))}
             </div>
