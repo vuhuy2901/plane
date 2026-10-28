@@ -8,6 +8,7 @@ import { GitBranch } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   CyclesOutline,
+  BlockingOutline,
   EstimateOutline,
   IntakeOutline,
   LabelsOutline,
@@ -32,6 +33,7 @@ export const PROJECT_SETTINGS_ICONS: Record<TProjectSettingsTabs, LucideIcon | R
   features_views: ViewsOutline,
   features_pages: PagesOutline,
   features_intake: IntakeOutline,
+  features_blocking: BlockingOutline,
   states: StateOutline,
   workflows: GitBranch,
   labels: LabelsOutline,

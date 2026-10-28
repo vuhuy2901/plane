@@ -2,16 +2,9 @@
   "mcpServers": {
     "plane": {
       "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "j:/plane/apps/api",
-        "python",
-        "-m",
-        "scripts.plane_stdio_mcp"
-      ],
+      "args": ["run", "--directory", "j:/plane/apps/api", "python", "-m", "scripts.plane_stdio_mcp"],
       "env": {
-        "PLANE_API_TOKEN": "plane_api_a8245f5566824cedbb439c2e1d36ad52",
+        "PLANE_API_TOKEN": "${PLANE_API_TOKEN}",
         "PLANE_MCP_URL": "http://localhost:8000/mcp/"
       }
     }

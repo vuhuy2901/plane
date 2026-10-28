@@ -858,7 +858,7 @@ function ProjectAutomationRulesForProject({
                                       type,
                                       relation_type: "blocking",
                                       source_mode: "triggering",
-                                      target_mode: "specific",
+                                      target_mode: "parent",
                                     }
                                   : { type }
                         )
@@ -1125,6 +1125,7 @@ function ProjectAutomationRulesForProject({
                                   label={side === "source" ? "From Work Item" : "To Work Item"}
                                   options={[
                                     { id: "triggering", name: "Triggering work item" },
+                                    { id: "parent", name: "Parent work item of triggering item" },
                                     ...(hasCreatedWorkItem
                                       ? [{ id: "created", name: "Work item created by an earlier action" }]
                                       : []),
@@ -1134,7 +1135,7 @@ function ProjectAutomationRulesForProject({
                                   onChange={(value) =>
                                     patchAction(index, {
                                       ...action,
-                                      [modeKey]: value as "triggering" | "created" | "specific",
+                                      [modeKey]: value as "triggering" | "parent" | "created" | "specific",
                                       [idKey]: undefined,
                                     })
                                   }
@@ -1152,8 +1153,10 @@ function ProjectAutomationRulesForProject({
                           })}
                         </div>
                         <p className="text-sm text-secondary">
-                          Source and target describe the dependency direction. Removing a missing dependency is safe and
-                          leaves the rule successful.
+                          Source and target describe the dependency direction. Parent work item resolves from the
+                          triggering item's current parent ID, whether that parent is a Task or an Epic. A triggering
+                          item without a parent is skipped safely. A specific work item is a fixed destination selected
+                          when configuring the rule.
                         </p>
                       </>
                     )}

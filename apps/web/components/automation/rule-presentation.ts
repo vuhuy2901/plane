@@ -86,6 +86,9 @@ export function conditionSummary(condition: AutomationCondition, resources: Auto
     : `${label} ${condition.value ? displayValue(condition.field, condition.value, resources) : "(select a value)"}`;
 }
 
+const dependencyEndpoint = (mode: AutomationAction["source_mode"] | AutomationAction["target_mode"]) =>
+  mode === "parent" ? "parent of triggering item" : (mode ?? "(select endpoint)");
+
 export function actionSummary(action: AutomationAction, resources: AutomationResources): string {
   switch (action.type) {
     case "":
@@ -107,7 +110,7 @@ export function actionSummary(action: AutomationAction, resources: AutomationRes
       return `Set source due date to ${action.mode === "fixed" ? action.date || "(select date)" : `${action.days ?? 3} days after trigger`}`;
     case "add_dependency":
     case "remove_dependency":
-      return `${action.type === "add_dependency" ? "Add" : "Remove"} ${action.relation_type?.replaceAll("_", " ") ?? "dependency"}: ${action.source_mode ?? "(select source)"} → ${action.target_mode ?? "(select target)"}`;
+      return `${action.type === "add_dependency" ? "Add" : "Remove"} ${action.relation_type?.replaceAll("_", " ") ?? "dependency"}: ${dependencyEndpoint(action.source_mode)} → ${dependencyEndpoint(action.target_mode)}`;
     default:
       return action.type.replaceAll("_", " ");
   }

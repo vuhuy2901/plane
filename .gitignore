@@ -83,6 +83,7 @@ package-lock.json
 
 
 .secrets
+.agents/mcp_config.local.json
 tmp/
 
 ## packages

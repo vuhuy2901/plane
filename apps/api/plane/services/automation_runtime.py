@@ -454,6 +454,9 @@ def prepare_actions(rule, issue, event, action_index=None):
             prepared.append(("create", (serializer, action)))
             continue
         elif kind in {"add_dependency", "remove_dependency"}:
+            if "parent" in (action["source_mode"], action["target_mode"]) and not issue.parent_id:
+                prepared.append(("skip", "The triggering Work Item has no parent for this dependency action."))
+                continue
             prepared.append(("dependency", action))
             continue
         serializer = IssueCreateSerializer(
@@ -638,6 +641,15 @@ def resolve_dependency_issue(action, side, triggering, progress, action_index):
     mode = action[f"{side}_mode"]
     if mode == "triggering":
         return triggering
+    if mode == "parent":
+        parent = Issue.issue_objects.filter(
+            pk=triggering.parent_id,
+            project=triggering.project,
+            workspace=triggering.workspace,
+        ).first()
+        if parent is None:
+            raise ValidationError(f"The triggering Work Item parent required by the {side} is no longer available.")
+        return parent
     if mode == "specific":
         target = Issue.issue_objects.filter(
             pk=action[f"{side}_id"], project=triggering.project, workspace=triggering.workspace
@@ -661,9 +673,7 @@ def canonical_dependency(source, target, relation_type, actor):
     pairs = dict(IssueRelationChoices._RELATION_PAIRS)
     reverse = {value: key for key, value in pairs.items() if value != key}
     left, right, stored = (
-        (target, source, reverse[relation_type])
-        if relation_type in reverse
-        else (source, target, relation_type)
+        (target, source, reverse[relation_type]) if relation_type in reverse else (source, target, relation_type)
     )
     return IssueRelation(
         issue=left,

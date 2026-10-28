@@ -171,6 +171,22 @@ test("dependency actions require explicit directional endpoints", () => {
   assert.equal(action.target_id, "target");
 });
 
+test("dependency actions accept the triggering work item's parent as a dynamic endpoint", () => {
+  const draft = createBugDraft(resources);
+  draft.actions = [
+    {
+      type: "add_dependency",
+      relation_type: "blocking",
+      source_mode: "triggering",
+      target_mode: "parent",
+    },
+  ];
+  const action = prepareRuleDefinition(draft, resources).actions[0];
+  assert.equal(action.source_mode, "triggering");
+  assert.equal(action.target_mode, "parent");
+  assert.equal(action.target_id, undefined);
+});
+
 test("save-and-enable uses returned saved ID and revision, then returns enabled rule", async () => {
   const draft = createBugDraft(resources);
   const existing: AutomationRule = { ...draft, id: "existing", revision: 3, enabled: true };

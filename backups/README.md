@@ -4,13 +4,18 @@ Thư mục này chứa file dữ liệu cơ sở dữ liệu (dataset/seed) và 
 
 ## 📦 Dataset có sẵn trong kho lưu trữ
 
-File seed: `backups/plane_database_backup.sql` (~4.8 MB, UTF-8 clean dump)
+File seed: `backups/plane_database_backup.sql` (UTF-8 clean local-development dump)
 Bao gồm:
 
 - **7 Users** (Các tài khoản trong nhóm như `quang.pm@local.test`, `tu.tester@local.test`, `nghi.fe@local.test`, `nam.ba@local.test`... - mật khẩu xem tại [LOCAL_TEAM_ACCOUNTS.txt](../LOCAL_TEAM_ACCOUNTS.txt))
 - **2 Workspaces** (`qldapm`, `qlda`)
 - **5 Projects** (`QLDAPM-Final`, `Quản lí dự án`, `Hệ thống ECommerce`, `Bán Hàng`, `QLDA`)
 - **391 Issues / Work Items**, chu kỳ (Cycles), Modules, Views, Labels, States...
+
+Backup scripts intentionally exclude runtime credential/session data such as
+API tokens, MCP connections, sessions, webhook logs, and integration tables.
+The schema is retained so migrations and local setup still work; create a new
+local Personal API Token after restoring.
 
 ---
 

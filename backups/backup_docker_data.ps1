@@ -52,7 +52,30 @@ $BackupFile = "$ScriptDir\plane_database_backup.sql"
 Write-Host "[3/3] Dang xuat PostgreSQL Database ra: $BackupFile ..." -ForegroundColor Yellow
 
 $containerId = (docker compose -f docker-compose-local.yml ps -q plane-db).Trim()
-docker exec $containerId pg_dump -U plane -d plane --clean --if-exists -f /tmp/plane_backup_temp.sql
+$sensitiveTables = @(
+    "api_tokens",
+    "api_activity_logs",
+    "mcp_connections",
+    "mcp_connection_events",
+    "sessions",
+    "social_login_connections",
+    "integrations",
+    "workspace_integrations",
+    "github_repositories",
+    "github_repository_syncs",
+    "github_issue_syncs",
+    "github_comment_syncs",
+    "slack_project_syncs",
+    "webhooks",
+    "webhook_logs",
+    "project_webhooks"
+)
+$dumpArgs = @("pg_dump", "-U", "plane", "-d", "plane", "--clean", "--if-exists")
+foreach ($table in $sensitiveTables) {
+    $dumpArgs += "--exclude-table-data=$table"
+}
+$dumpArgs += @("-f", "/tmp/plane_backup_temp.sql")
+docker exec $containerId @dumpArgs
 docker cp "${containerId}:/tmp/plane_backup_temp.sql" "$BackupFile"
 docker exec $containerId rm -f /tmp/plane_backup_temp.sql
 

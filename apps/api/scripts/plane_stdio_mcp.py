@@ -12,12 +12,14 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.mcpserver import MCPServer
 
 MCP_URL = os.environ.get("PLANE_MCP_URL", "http://localhost:8000/mcp/")
-API_TOKEN = os.environ.get("PLANE_API_TOKEN", "plane_api_a8245f5566824cedbb439c2e1d36ad52")
+API_TOKEN = os.environ.get("PLANE_API_TOKEN")
 
 server = MCPServer("plane")
 
 
 async def _call_plane_api_mcp(tool_name: str, args: dict) -> str:
+    if not API_TOKEN:
+        raise RuntimeError("PLANE_API_TOKEN is required; set it in the MCP client's environment.")
     timeout = httpx2.Timeout(30, read=300)
     async with httpx2.AsyncClient(
         headers={"Authorization": f"Bearer {API_TOKEN}"},

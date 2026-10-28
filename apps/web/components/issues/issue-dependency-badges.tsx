@@ -3,8 +3,7 @@ import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { BlockedIcon, BlockerIcon } from "@plane/blocks/icons";
 import type { TIssue } from "@plane/types";
 import { cn } from "@plane/utils";
-import { useIssueDetail } from "@/hooks/store/use-issue-detail";
-import { useProjectState } from "@/hooks/store/use-project-state";
+import { useIssueDependencyStatus } from "@/components/issues/issue-detail/dependency-status-property";
 
 type Props = {
   issue: TIssue;
@@ -14,50 +13,39 @@ type Props = {
 
 export const IssueDependencyBadges = observer(function IssueDependencyBadges(props: Props) {
   const { issue, compact = false, className } = props;
-  const {
-    issue: { getIssueById },
-  } = useIssueDetail();
-  const { getStateById } = useProjectState();
+  const { activeBlockerIds, activeBlockedWorkItemIds } = useIssueDependencyStatus(issue.id);
 
-  const blockers = (issue.issue_relation ?? []).filter((relation) => {
-    if (relation.relation_type !== "blocked_by") return false;
-    const relatedIssue = getIssueById(relation.id);
-    const state = getStateById(relatedIssue?.state_id ?? relation.state_id);
-    return state?.group !== "completed";
-  });
-  const blockedItems = (issue.issue_related ?? []).filter((relation) => relation.relation_type === "blocked_by");
-
-  if (!blockers.length && !blockedItems.length) return null;
+  if (!activeBlockerIds.length && !activeBlockedWorkItemIds.length) return null;
 
   return (
     <span className={cn("inline-flex flex-shrink-0 items-center gap-1", className)}>
-      {blockers.length > 0 && (
+      {activeBlockerIds.length > 0 && (
         <Tooltip
-          label={`Blocked by ${blockers.length} active work item${blockers.length === 1 ? "" : "s"}`}
+          label={`Blocked by ${activeBlockerIds.length} active work item${activeBlockerIds.length === 1 ? "" : "s"}`}
           layout="stacked"
         >
           <span
-            aria-label={`Blocked by ${blockers.length} active work item${blockers.length === 1 ? "" : "s"}`}
+            aria-label={`Blocked by ${activeBlockerIds.length} active work item${activeBlockerIds.length === 1 ? "" : "s"}`}
             className="inline-flex h-5 items-center gap-1 rounded-sm bg-danger-subtle px-1.5 text-11 font-medium text-danger-primary"
           >
             <BlockedIcon className="size-3" />
             {!compact && "Blocked"}
-            <span>{blockers.length}</span>
+            <span>{activeBlockerIds.length}</span>
           </span>
         </Tooltip>
       )}
-      {blockedItems.length > 0 && (
+      {activeBlockedWorkItemIds.length > 0 && (
         <Tooltip
-          label={`Blocking ${blockedItems.length} work item${blockedItems.length === 1 ? "" : "s"}`}
+          label={`Blocking ${activeBlockedWorkItemIds.length} work item${activeBlockedWorkItemIds.length === 1 ? "" : "s"}`}
           layout="stacked"
         >
           <span
-            aria-label={`Blocking ${blockedItems.length} work item${blockedItems.length === 1 ? "" : "s"}`}
+            aria-label={`Blocking ${activeBlockedWorkItemIds.length} work item${activeBlockedWorkItemIds.length === 1 ? "" : "s"}`}
             className="inline-flex h-5 items-center gap-1 rounded-sm bg-warning-subtle px-1.5 text-11 font-medium text-warning-primary"
           >
             <BlockerIcon className="size-3" />
             {!compact && "Blocking"}
-            <span>{blockedItems.length}</span>
+            <span>{activeBlockedWorkItemIds.length}</span>
           </span>
         </Tooltip>
       )}

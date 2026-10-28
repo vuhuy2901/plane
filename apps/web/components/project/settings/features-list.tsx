@@ -32,6 +32,7 @@ type Props = {
   workspaceSlug: string;
   projectId: string;
   isAdmin: boolean;
+  featureKeys?: string[];
 };
 
 const PROJECT_FEATURES_LIST = {
@@ -92,7 +93,7 @@ const PROJECT_FEATURES_LIST = {
 };
 
 export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: Props) {
-  const { workspaceSlug, projectId, isAdmin } = props;
+  const { workspaceSlug, projectId, isAdmin, featureKeys } = props;
   // store hooks
   const { t } = useTranslation();
   const { getProjectById, updateProject } = useProject();
@@ -126,40 +127,42 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
       <div>
         <SettingsHeading title={t("projects_and_issues")} description={t("projects_and_issues_description")} />
         <div className="mt-6 flex flex-col gap-y-4">
-          {Object.entries(PROJECT_FEATURES_LIST).map(([featureItemKey, featureItem]) => (
-            <div key={featureItemKey}>
-              <SettingsBoxedControlItem
-                title={
-                  <span className="flex items-center gap-2">
-                    {featureItem.key === "blocked_completion" ? featureItem.title : t(featureItem.key)}
-                    {featureItem.isPro && (
-                      <Tooltip label="Pro feature">
-                        <UpgradeBadge className="rounded-sm" />
-                      </Tooltip>
-                    )}
-                  </span>
-                }
-                description={
-                  featureItem.key === "blocked_completion"
-                    ? featureItem.description
-                    : t(`${featureItem.key}_description`)
-                }
-                control={
-                  <ProjectFeatureToggle
-                    workspaceSlug={workspaceSlug}
-                    projectId={projectId}
-                    featureItem={featureItem}
-                    value={Boolean(currentProjectDetails?.[featureItem.property as keyof IProject])}
-                    handleSubmit={handleSubmit}
-                    disabled={!isAdmin}
-                  />
-                }
-              />
-              {/* {currentProjectDetails?.[featureItem.property as keyof IProject] && (
+          {Object.entries(PROJECT_FEATURES_LIST)
+            .filter(([featureItemKey]) => !featureKeys || featureKeys.includes(featureItemKey))
+            .map(([featureItemKey, featureItem]) => (
+              <div key={featureItemKey}>
+                <SettingsBoxedControlItem
+                  title={
+                    <span className="flex items-center gap-2">
+                      {featureItem.key === "blocked_completion" ? featureItem.title : t(featureItem.key)}
+                      {featureItem.isPro && (
+                        <Tooltip label="Pro feature">
+                          <UpgradeBadge className="rounded-sm" />
+                        </Tooltip>
+                      )}
+                    </span>
+                  }
+                  description={
+                    featureItem.key === "blocked_completion"
+                      ? featureItem.description
+                      : t(`${featureItem.key}_description`)
+                  }
+                  control={
+                    <ProjectFeatureToggle
+                      workspaceSlug={workspaceSlug}
+                      projectId={projectId}
+                      featureItem={featureItem}
+                      value={Boolean(currentProjectDetails?.[featureItem.property as keyof IProject])}
+                      handleSubmit={handleSubmit}
+                      disabled={!isAdmin}
+                    />
+                  }
+                />
+                {/* {currentProjectDetails?.[featureItem.property as keyof IProject] && (
                 <div className="pl-14">{featureItem.renderChildren?.(currentProjectDetails, workspaceSlug)}</div>
               )} */}
-            </div>
-          ))}
+              </div>
+            ))}
         </div>
       </div>
     </>

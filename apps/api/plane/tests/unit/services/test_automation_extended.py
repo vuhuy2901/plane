@@ -282,6 +282,49 @@ def test_dependency_action_can_use_work_item_created_by_previous_action(runtime)
     assert IssueRelation.objects.filter(issue=source, related_issue=created, relation_type="blocked_by").exists()
 
 
+def test_dependency_action_can_block_triggering_work_item_parent(runtime):
+    project, _, bug = runtime
+    parent = Issue.objects.create(project=project, name="Parent Task or Epic", state=bug.state)
+    bug.parent = parent
+    bug.save(update_fields=["parent"])
+    _, event = make_event(
+        runtime,
+        [
+            {
+                "type": "add_dependency",
+                "relation_type": "blocking",
+                "source_mode": "triggering",
+                "target_mode": "parent",
+            }
+        ],
+    )
+
+    process_event(event.id)
+
+    assert IssueRelation.objects.filter(issue=parent, related_issue=bug, relation_type="blocked_by").exists()
+    assert ProjectAutomationExecution.objects.get(event=event).status == "success"
+
+
+def test_parent_dependency_action_skips_triggering_work_item_without_parent(runtime):
+    _, event = make_event(
+        runtime,
+        [
+            {
+                "type": "add_dependency",
+                "relation_type": "blocking",
+                "source_mode": "triggering",
+                "target_mode": "parent",
+            }
+        ],
+    )
+
+    process_event(event.id)
+
+    execution = ProjectAutomationExecution.objects.get(event=event)
+    assert execution.status == "skipped"
+    assert "has no parent" in execution.detail
+
+
 def test_remove_label_and_fixed_due_date(runtime):
     project, _, issue = runtime
     label = Label.objects.create(project=project, name="Review")

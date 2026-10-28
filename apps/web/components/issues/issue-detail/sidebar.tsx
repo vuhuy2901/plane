@@ -24,7 +24,6 @@ import {
 import { DateSelect } from "@plane/blocks/property-select";
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
 // components
-import { EstimateSelect } from "@/components/dropdowns/estimate/estimate-select";
 import { HierarchicalEstimateProperty } from "@/components/issues/issue-detail/hierarchical-estimate-property";
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
 import { MemberSelect } from "@/components/dropdowns/member/member-select";
@@ -42,6 +41,7 @@ import { useUserProfile } from "@/hooks/store/user";
 import { IssueParentSelectRoot } from "@/components/issues/parent-select-root";
 import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/property-list-item";
 import { IssueCycleSelect } from "./cycle-select";
+import { IssueDependencyStatusProperties } from "./dependency-status-property";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
 import type { TIssueOperations } from "./root";
@@ -112,6 +112,7 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 tooltip
               />
             </SidebarPropertyListItem>
+            <IssueDependencyStatusProperties workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
 
             <SidebarPropertyListItem icon={MembersOutline} label={t("common.assignees")}>
               <MemberSelect

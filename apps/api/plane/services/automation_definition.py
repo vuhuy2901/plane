@@ -157,9 +157,9 @@ class ActionInput(StrictInput):
     relation = serializers.ChoiceField(choices=RELATIONS, required=False)
     parent_mode = serializers.ChoiceField(choices=("none", "source"), required=False)
     relation_type = serializers.ChoiceField(choices=RELATIONS, required=False)
-    source_mode = serializers.ChoiceField(choices=("triggering", "created", "specific"), required=False)
+    source_mode = serializers.ChoiceField(choices=("triggering", "parent", "created", "specific"), required=False)
     source_id = serializers.UUIDField(required=False)
-    target_mode = serializers.ChoiceField(choices=("triggering", "created", "specific"), required=False)
+    target_mode = serializers.ChoiceField(choices=("triggering", "parent", "created", "specific"), required=False)
     target_id = serializers.UUIDField(required=False)
 
     def validate(self, attrs):
@@ -315,10 +315,15 @@ class AutomationDefinitionInput(StrictInput):
         for index, action in enumerate(attrs["actions"]):
             if action["type"] == "create_work_item":
                 created_available = True
-            if action["type"] in ("add_dependency", "remove_dependency") and "created" in (
-                action["source_mode"],
-                action["target_mode"],
-            ) and not created_available:
+            if (
+                action["type"] in ("add_dependency", "remove_dependency")
+                and "created"
+                in (
+                    action["source_mode"],
+                    action["target_mode"],
+                )
+                and not created_available
+            ):
                 raise serializers.ValidationError(
                     {"actions": {index: "Created Work Item requires a Create Work Item action earlier in the rule."}}
                 )

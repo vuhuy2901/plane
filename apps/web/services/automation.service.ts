@@ -23,9 +23,9 @@ export type AutomationAction = {
   description?: string;
   relation?: string;
   relation_type?: string;
-  source_mode?: "triggering" | "created" | "specific";
+  source_mode?: "triggering" | "parent" | "created" | "specific";
   source_id?: string;
-  target_mode?: "triggering" | "created" | "specific";
+  target_mode?: "triggering" | "parent" | "created" | "specific";
   target_id?: string;
 };
 export type TriggerOptions = {

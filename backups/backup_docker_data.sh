@@ -23,7 +23,18 @@ done
 
 echo "[2/2] Dumping database to $BACKUP_FILE..."
 CONTAINER_ID=$(docker compose -f docker-compose-local.yml ps -q plane-db | tr -d '[:space:]')
-docker exec "$CONTAINER_ID" pg_dump -U plane -d plane --clean --if-exists -f /tmp/plane_backup_temp.sql
+SENSITIVE_TABLES=(
+    api_tokens api_activity_logs mcp_connections mcp_connection_events sessions
+    social_login_connections integrations workspace_integrations
+    github_repositories github_repository_syncs github_issue_syncs github_comment_syncs
+    slack_project_syncs webhooks webhook_logs project_webhooks
+)
+DUMP_ARGS=(pg_dump -U plane -d plane --clean --if-exists)
+for table in "${SENSITIVE_TABLES[@]}"; do
+    DUMP_ARGS+=("--exclude-table-data=$table")
+done
+DUMP_ARGS+=(-f /tmp/plane_backup_temp.sql)
+docker exec "$CONTAINER_ID" "${DUMP_ARGS[@]}"
 docker cp "${CONTAINER_ID}:/tmp/plane_backup_temp.sql" "$BACKUP_FILE"
 docker exec "$CONTAINER_ID" rm -f /tmp/plane_backup_temp.sql
 
