@@ -10,10 +10,11 @@ import { useParams } from "next/navigation";
 import { Popover, PopoverContent, PopoverTrigger } from "@makeplane/propel/components/popover";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import { ControlLink } from "@plane/blocks/layout";
-import { findTotalDaysInRange, generateWorkItemLink } from "@plane/utils";
+import { generateWorkItemLink } from "@plane/utils";
 // components
 import { SIDEBAR_WIDTH } from "@/components/gantt-chart/constants";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
+import { IssueDependencyBadges } from "@/components/issues/issue-dependency-badges";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
@@ -55,8 +56,6 @@ export const IssueGanttBlock = observer(function IssueGanttBlock(props: Props) {
 
   const handleIssuePeekOverview = () => handleRedirection(workspaceSlug, issueDetails, isMobile);
 
-  const duration = findTotalDaysInRange(issueDetails?.start_date, issueDetails?.target_date) || 0;
-
   return (
     <Popover>
       <PopoverTrigger
@@ -77,6 +76,7 @@ export const IssueGanttBlock = observer(function IssueGanttBlock(props: Props) {
             >
               {issueDetails?.name}
             </div>
+            {issueDetails && <IssueDependencyBadges issue={issueDetails} compact className="relative mr-1" />}
           </div>
         }
       />
@@ -153,6 +153,7 @@ export const IssueGanttSidebarBlock = observer(function IssueGanttSidebarBlock(p
         <Tooltip label={issueDetails?.name ?? ""} layout="stacked" disabled={isMobile}>
           <span className="flex-grow truncate text-13 font-medium">{issueDetails?.name}</span>
         </Tooltip>
+        {issueDetails && <IssueDependencyBadges issue={issueDetails} compact />}
       </div>
     </ControlLink>
   );

@@ -105,6 +105,9 @@ export function actionSummary(action: AutomationAction, resources: AutomationRes
       return `Comment on source work item: ${action.text || "(enter comment)"}`;
     case "set_due_date":
       return `Set source due date to ${action.mode === "fixed" ? action.date || "(select date)" : `${action.days ?? 3} days after trigger`}`;
+    case "add_dependency":
+    case "remove_dependency":
+      return `${action.type === "add_dependency" ? "Add" : "Remove"} ${action.relation_type?.replaceAll("_", " ") ?? "dependency"}: ${action.source_mode ?? "(select source)"} → ${action.target_mode ?? "(select target)"}`;
     default:
       return action.type.replaceAll("_", " ");
   }
@@ -151,6 +154,23 @@ export function historyCreatedWorkItemIds(row: AutomationHistory): string[] {
       )
     ),
   ];
+}
+
+export function historyDependencyChanges(row: AutomationHistory) {
+  if (!row.rule_id) return [];
+  return Object.entries(row.snapshot.steps?.[row.rule_id] ?? {}).flatMap(([stepId, step]) =>
+    step.source_issue_id && step.target_issue_id && step.relation_type
+      ? [
+          {
+            sourceId: step.source_issue_id,
+            targetId: step.target_issue_id,
+            relationType: step.relation_type,
+            changed: step.changed !== false,
+            stepId,
+          },
+        ]
+      : []
+  );
 }
 
 export function dryRunSummary(result: AutomationTestResult): string {

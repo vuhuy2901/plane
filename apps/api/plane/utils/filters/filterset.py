@@ -5,10 +5,10 @@
 import copy
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django_filters import FilterSet, filters
 
-from plane.db.models import Issue, IssueAssignee
+from plane.db.models import Issue, IssueAssignee, IssueRelation
 
 
 class UUIDInFilter(filters.BaseInFilter, filters.UUIDFilter):
@@ -166,6 +166,10 @@ class IssueFilterSet(BaseFilterSet):
     created_by_id__in = UUIDInFilter(field_name="created_by_id", lookup_expr="in")
 
     is_archived = filters.BooleanFilter(method="filter_is_archived")
+    is_blocked = filters.BooleanFilter(method="filter_is_blocked")
+    is_blocked__exact = filters.BooleanFilter(method="filter_is_blocked")
+    is_blocking = filters.BooleanFilter(method="filter_is_blocking")
+    is_blocking__exact = filters.BooleanFilter(method="filter_is_blocking")
 
     state_group = filters.CharFilter(field_name="state__group")
     state_group__in = CharInFilter(field_name="state__group", lookup_expr="in")
@@ -220,6 +224,22 @@ class IssueFilterSet(BaseFilterSet):
         if value in (False, "false", "False", 0, "0"):
             return Q(archived_at__isnull=True)
         return Q()  # No filter
+
+    def filter_is_blocked(self, queryset, name, value):
+        active_blocker = IssueRelation.objects.filter(
+            issue_id=OuterRef("pk"),
+            relation_type="blocked_by",
+        ).exclude(related_issue__state__group="completed")
+        expression = Exists(active_blocker)
+        return Q(expression) if value else ~Q(expression)
+
+    def filter_is_blocking(self, queryset, name, value):
+        blocked_item = IssueRelation.objects.filter(
+            related_issue_id=OuterRef("pk"),
+            relation_type="blocked_by",
+        )
+        expression = Exists(blocked_item)
+        return Q(expression) if value else ~Q(expression)
 
     # Filter methods with soft delete exclusion for relations
 

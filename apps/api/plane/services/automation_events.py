@@ -37,6 +37,14 @@ def bulk_create_relations(relations, **kwargs):
         return []
     ids = {item.issue_id for item in relations} | {item.related_issue_id for item in relations}
     list(Issue.objects.select_for_update().filter(pk__in=ids).order_by("id"))
+    from plane.services.issue_relations import validate_relation_candidates
+
+    relations = validate_relation_candidates(
+        relations,
+        allow_existing=bool(kwargs.get("ignore_conflicts")),
+    )
+    if not relations:
+        return []
     query = IssueRelation.objects.filter(Q(issue_id__in=ids), related_issue_id__in=ids)
     existing = set(query.values_list("id", flat=True))
     result = IssueRelation.objects.bulk_create(relations, **kwargs)

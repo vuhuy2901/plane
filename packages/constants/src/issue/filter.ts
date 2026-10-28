@@ -151,6 +151,8 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       "label_id",
       "start_date",
       "target_date",
+      "is_blocked",
+      "is_blocking",
     ],
     layoutOptions: {
       list: {
@@ -216,6 +218,8 @@ export const ISSUE_DISPLAY_FILTERS_BY_PAGE: TIssueFiltersToDisplayByPageType = {
       "label_id",
       "start_date",
       "target_date",
+      "is_blocked",
+      "is_blocking",
     ],
     layoutOptions: {
       list: {
@@ -350,10 +354,10 @@ export const defaultActivityFilters: TActivityFilters[] = [
 ];
 
 export const filterActivityOnSelectedFilters = (
-  activity: TIssueActivityComment[],
+  activities: TIssueActivityComment[],
   filters: TActivityFilters[]
 ): TIssueActivityComment[] =>
-  activity.filter((activity) => {
+  activities.filter((activity) => {
     if (activity.activity_type === EActivityFilterType.DEFAULT) return true;
     return filters.includes(activity.activity_type as TActivityFilters);
   });

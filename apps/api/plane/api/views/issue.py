@@ -92,6 +92,7 @@ from .base import BaseAPIView
 from plane.utils.host import base_host
 from plane.utils.serializers import writable_data
 from plane.utils.issue_relation_mapper import get_actual_relation
+from plane.services.issue_relations import validate_relation_candidates
 from plane.bgtasks.webhook_task import model_activity
 from plane.app.permissions import ROLE
 from plane.utils.openapi import (
@@ -2563,7 +2564,7 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
         )
 
         from plane.services.automation_events import bulk_create_relations
-        bulk_create_relations(
+        relation_candidates = validate_relation_candidates(
             [
                 IssueRelation(
                     issue_id=(issue if is_reverse else issue_id),
@@ -2575,9 +2576,11 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
                     updated_by=request.user,
                 )
                 for issue in issues
-            ],
+            ]
+        )
+        bulk_create_relations(
+            relation_candidates,
             batch_size=10,
-            ignore_conflicts=True,
         )
 
         issue_activity.delay(

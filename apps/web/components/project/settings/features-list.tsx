@@ -10,7 +10,14 @@ import { useTranslation } from "@plane/i18n";
 import { setPromiseToast } from "@plane/blocks/toast";
 import { Tooltip } from "@makeplane/propel/components/tooltip";
 import type { IProject } from "@plane/types";
-import { CyclesOutline, IntakeOutline, ModuleOutline, PagesOutline, ViewsOutline } from "@makeplane/propel/icons";
+import {
+  BlockingOutline,
+  CyclesOutline,
+  IntakeOutline,
+  ModuleOutline,
+  PagesOutline,
+  ViewsOutline,
+} from "@makeplane/propel/icons";
 // components
 import { SettingsBoxedControlItem } from "@/components/settings/boxed-control-item";
 import { SettingsHeading } from "@/components/settings/heading";
@@ -28,6 +35,15 @@ type Props = {
 };
 
 const PROJECT_FEATURES_LIST = {
+  blocked_completion: {
+    key: "blocked_completion",
+    property: "prevent_blocked_issue_completion",
+    title: "Prevent blocked completion",
+    description: "Prevent work items with active blockers from moving to a completed state.",
+    icon: <BlockingOutline className="h-5 w-5 flex-shrink-0 text-tertiary" />,
+    isPro: false,
+    isEnabled: true,
+  },
   cycles: {
     key: "cycles",
     property: "cycle_view",
@@ -115,7 +131,7 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
               <SettingsBoxedControlItem
                 title={
                   <span className="flex items-center gap-2">
-                    {t(featureItem.key)}
+                    {featureItem.key === "blocked_completion" ? featureItem.title : t(featureItem.key)}
                     {featureItem.isPro && (
                       <Tooltip label="Pro feature">
                         <UpgradeBadge className="rounded-sm" />
@@ -123,7 +139,11 @@ export const ProjectFeaturesList = observer(function ProjectFeaturesList(props: 
                     )}
                   </span>
                 }
-                description={t(`${featureItem.key}_description`)}
+                description={
+                  featureItem.key === "blocked_completion"
+                    ? featureItem.description
+                    : t(`${featureItem.key}_description`)
+                }
                 control={
                   <ProjectFeatureToggle
                     workspaceSlug={workspaceSlug}

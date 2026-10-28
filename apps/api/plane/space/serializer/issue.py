@@ -360,6 +360,19 @@ class IssueCreateSerializer(BaseSerializer):
         return issue
 
     def update(self, instance, validated_data):
+        requested_state = validated_data.get("state")
+        if (
+            requested_state is not None
+            and requested_state.group == "completed"
+            and instance.state.group != "completed"
+            and instance.project.prevent_blocked_issue_completion
+            and IssueRelation.objects.filter(issue=instance, relation_type="blocked_by")
+            .exclude(related_issue__state__group="completed")
+            .exists()
+        ):
+            raise serializers.ValidationError(
+                {"state": "Complete the active blocking Work Items before completing this Work Item."}
+            )
         assignees = validated_data.pop("assignees", None)
         labels = validated_data.pop("labels", None)
 

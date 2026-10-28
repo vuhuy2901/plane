@@ -309,7 +309,11 @@ class IssueRelation(ProjectBaseModel):
                 fields=["issue", "related_issue"],
                 condition=Q(deleted_at__isnull=True),
                 name="issue_relation_unique_issue_related_issue_when_deleted_at_null",
-            )
+            ),
+            models.CheckConstraint(
+                condition=Q(deleted_at__isnull=False) | ~Q(issue=models.F("related_issue")),
+                name="issue_relation_active_not_self_referential",
+            ),
         ]
         verbose_name = "Issue Relation"
         verbose_name_plural = "Issue Relations"

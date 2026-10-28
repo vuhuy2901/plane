@@ -31,6 +31,7 @@ export interface IPartialProject {
   page_view: boolean;
   inbox_view: boolean;
   guest_view_all_features?: boolean;
+  prevent_blocked_issue_completion?: boolean;
   project_lead?: IUserLite | string | null;
   network?: number;
   // Timestamps

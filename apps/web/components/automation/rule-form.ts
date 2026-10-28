@@ -64,7 +64,7 @@ export function prepareRuleDefinition(
   resources: AutomationResources
 ): AutomationDefinition {
   if (!draft.name.trim()) throw new Error("Enter a rule name before saving.");
-  if (!draft.trigger) throw new Error("Select a source event in When.");
+  if (!draft.trigger) throw new Error("Select a trigger in When.");
   if (!draft.actions.length) throw new Error("Add at least one action in Then.");
   const validateConditions = (conditions: AutomationCondition[], section: string) => {
     for (const [index, condition] of conditions.entries()) {
@@ -98,6 +98,12 @@ export function prepareRuleDefinition(
       if (!action.type_id || !resources.types.some((type) => type.id === action.type_id))
         fail("select an available type for the new work item.");
       if (!action.title?.trim()) fail("enter a title for the new work item.");
+    }
+    if (["add_dependency", "remove_dependency"].includes(action.type)) {
+      if (!action.relation_type) fail("select a dependency type.");
+      if (!action.source_mode || !action.target_mode) fail("select both dependency endpoints.");
+      if (action.source_mode === "specific" && !action.source_id) fail("select the source work item.");
+      if (action.target_mode === "specific" && !action.target_id) fail("select the target work item.");
     }
   }
   return {

@@ -22,6 +22,11 @@ export type AutomationAction = {
   title?: string;
   description?: string;
   relation?: string;
+  relation_type?: string;
+  source_mode?: "triggering" | "created" | "specific";
+  source_id?: string;
+  target_mode?: "triggering" | "created" | "specific";
+  target_id?: string;
 };
 export type TriggerOptions = {
   type_id?: string;
@@ -129,7 +134,20 @@ export type AutomationHistory = {
     trigger_details?: Record<string, unknown>;
     triggers?: string[];
     evaluation?: AutomationEvaluation;
-    steps?: Record<string, Record<string, { created_issue_id?: string; done?: boolean }>>;
+    steps?: Record<
+      string,
+      Record<
+        string,
+        {
+          created_issue_id?: string;
+          source_issue_id?: string;
+          target_issue_id?: string;
+          relation_type?: string;
+          done?: boolean;
+          changed?: boolean;
+        }
+      >
+    >;
   };
 };
 

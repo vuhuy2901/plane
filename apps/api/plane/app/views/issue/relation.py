@@ -32,6 +32,7 @@ from plane.db.models import (
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.issue_relation_mapper import get_actual_relation
 from plane.utils.host import base_host
+from plane.services.issue_relations import validate_relation_candidates
 
 
 def issue_in_project(issue_id, slug, project_id, *, include_archived=False):
@@ -267,7 +268,7 @@ class IssueRelationViewSet(BaseViewSet):
 
         from plane.services.automation_events import bulk_create_relations
 
-        issue_relation = bulk_create_relations(
+        relation_candidates = validate_relation_candidates(
             [
                 IssueRelation(
                     issue_id=(issue if relation_type in ["blocking", "start_after", "finish_after"] else issue_id),
@@ -281,9 +282,11 @@ class IssueRelationViewSet(BaseViewSet):
                     updated_by=request.user,
                 )
                 for issue in issues
-            ],
+            ]
+        )
+        issue_relation = bulk_create_relations(
+            relation_candidates,
             batch_size=10,
-            ignore_conflicts=True,
         )
 
         issue_activity.delay(

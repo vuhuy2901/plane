@@ -62,6 +62,8 @@ ACTIONS = (
     "add_comment",
     "set_due_date",
     "create_work_item",
+    "add_dependency",
+    "remove_dependency",
 )
 
 
@@ -154,6 +156,11 @@ class ActionInput(StrictInput):
     description = serializers.CharField(max_length=50000, required=False, allow_blank=True)
     relation = serializers.ChoiceField(choices=RELATIONS, required=False)
     parent_mode = serializers.ChoiceField(choices=("none", "source"), required=False)
+    relation_type = serializers.ChoiceField(choices=RELATIONS, required=False)
+    source_mode = serializers.ChoiceField(choices=("triggering", "created", "specific"), required=False)
+    source_id = serializers.UUIDField(required=False)
+    target_mode = serializers.ChoiceField(choices=("triggering", "created", "specific"), required=False)
+    target_id = serializers.UUIDField(required=False)
 
     def validate(self, attrs):
         kind = attrs["type"]
@@ -174,6 +181,8 @@ class ActionInput(StrictInput):
                 "relation",
                 "parent_mode",
             },
+            "add_dependency": {"relation_type", "source_mode", "source_id", "target_mode", "target_id"},
+            "remove_dependency": {"relation_type", "source_mode", "source_id", "target_mode", "target_id"},
         }[kind]
         if attrs.get("target") == "current" and kind != "change_state":
             attrs.pop("target")
@@ -187,6 +196,8 @@ class ActionInput(StrictInput):
             "add_comment": {"text"},
             "set_due_date": set(),
             "create_work_item": {"type_id", "title", "priority"},
+            "add_dependency": {"relation_type", "source_mode", "target_mode"},
+            "remove_dependency": {"relation_type", "source_mode", "target_mode"},
         }[kind]
         if not required.issubset(attrs):
             raise serializers.ValidationError("Complete the required action parameters.")
@@ -205,6 +216,18 @@ class ActionInput(StrictInput):
                 raise serializers.ValidationError("Select only one due date mode.")
         if "timezone" in attrs:
             validate_zone(attrs["timezone"])
+        if kind in ("add_dependency", "remove_dependency"):
+            for side in ("source", "target"):
+                mode = attrs[f"{side}_mode"]
+                has_id = f"{side}_id" in attrs
+                if (mode == "specific") != has_id:
+                    raise serializers.ValidationError(
+                        {f"{side}_id": f"Select a Work Item only for the Specific {side.title()} mode."}
+                    )
+            if attrs["source_mode"] == attrs["target_mode"] and attrs["source_mode"] != "specific":
+                raise serializers.ValidationError("Source and target must resolve to different Work Items.")
+            if attrs.get("source_id") and attrs.get("source_id") == attrs.get("target_id"):
+                raise serializers.ValidationError("Source and target must be different Work Items.")
         return {key: str(value) if isinstance(value, (UUID, date)) else value for key, value in attrs.items()}
 
 
@@ -288,6 +311,17 @@ class AutomationDefinitionInput(StrictInput):
             raise serializers.ValidationError("Parent automation requires a State Changed trigger.")
         if parent and not family:
             raise serializers.ValidationError("Changing parent state requires All Subtasks Completed.")
+        created_available = False
+        for index, action in enumerate(attrs["actions"]):
+            if action["type"] == "create_work_item":
+                created_available = True
+            if action["type"] in ("add_dependency", "remove_dependency") and "created" in (
+                action["source_mode"],
+                action["target_mode"],
+            ) and not created_available:
+                raise serializers.ValidationError(
+                    {"actions": {index: "Created Work Item requires a Create Work Item action earlier in the rule."}}
+                )
         return attrs
 
 

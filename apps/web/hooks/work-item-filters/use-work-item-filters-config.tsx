@@ -17,6 +17,7 @@ import {
   ProjectsOutline,
   StartDateOutline,
   StateOutline,
+  BlockingOutline,
   UserOutline,
 } from "@makeplane/propel/icons";
 // plane imports
@@ -33,6 +34,7 @@ import type {
   IProject,
   TWorkItemFilterProperty,
 } from "@plane/types";
+import { EQUALITY_OPERATOR } from "@plane/types";
 
 import {
   getAssigneeFilterConfig,
@@ -52,6 +54,9 @@ import {
   getTargetDateFilterConfig,
   getUpdatedAtFilterConfig,
   isLoaderReady,
+  createFilterConfig,
+  createOperatorConfigEntry,
+  getSingleSelectConfig,
 } from "@plane/utils";
 // store hooks
 import { useCycle } from "@/hooks/store/use-cycle";
@@ -103,7 +108,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   // derived values
   const operatorConfigs = useFiltersOperatorConfigs({ workspaceSlug });
   const filtersToShow = useMemo(() => new Set(allowedFilters), [allowedFilters]);
-  const project = useMemo(() => getProjectById(projectId), [projectId, getProjectById]);
+  const currentProject = useMemo(() => getProjectById(projectId), [projectId, getProjectById]);
   const members: IUserLite[] | undefined = useMemo(
     () =>
       memberIds
@@ -133,21 +138,46 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
     [moduleIds, getModuleById]
   );
   const projects = useMemo(
-    () =>
-      projectIds
-        ? (projectIds.map((projectId) => getProjectById(projectId)).filter((project) => project) as IProject[])
-        : [],
+    () => (projectIds ? (projectIds.map((id) => getProjectById(id)).filter((item) => item) as IProject[]) : []),
     [projectIds, getProjectById]
   );
   const areAllConfigsInitialized = useMemo(() => isLoaderReady(projectLoader), [projectLoader]);
-
-  /**
-   * Checks if a filter is enabled based on the filters to show.
-   * @param key - The filter key.
-   * @param level - The level of the filter.
-   * @returns True if the filter is enabled, false otherwise.
-   */
   const isFilterEnabled = useCallback((key: TWorkItemFilterProperty) => filtersToShow.has(key), [filtersToShow]);
+
+  const dependencyFilterConfig = useCallback(
+    (key: "is_blocked" | "is_blocking", label: string) => {
+      const isEnabled = isFilterEnabled(key);
+      return createFilterConfig<TWorkItemFilterProperty>({
+        id: key,
+        label,
+        isEnabled,
+        icon: BlockingOutline,
+        supportedOperatorConfigsMap: new Map([
+          createOperatorConfigEntry(EQUALITY_OPERATOR.EXACT, { ...operatorConfigs, isEnabled }, (params) =>
+            getSingleSelectConfig(
+              {
+                items: [
+                  { id: "true", label: "Yes", value: true },
+                  { id: "false", label: "No", value: false },
+                ],
+                getId: (item) => item.id,
+                getLabel: (item) => item.label,
+                getValue: (item) => item.value,
+              },
+              params
+            )
+          ),
+        ]),
+      });
+    },
+    [isFilterEnabled, operatorConfigs]
+  );
+
+  const blockedFilterConfig = useMemo(() => dependencyFilterConfig("is_blocked", "Blocked"), [dependencyFilterConfig]);
+  const blockingFilterConfig = useMemo(
+    () => dependencyFilterConfig("is_blocking", "Blocking"),
+    [dependencyFilterConfig]
+  );
 
   // state group filter config
   const stateGroupFilterConfig = useMemo(
@@ -193,26 +223,26 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
   const cycleFilterConfig = useMemo(
     () =>
       getCycleFilterConfig<TWorkItemFilterProperty>("cycle_id")({
-        isEnabled: isFilterEnabled("cycle_id") && project?.cycle_view === true && cycles !== undefined,
+        isEnabled: isFilterEnabled("cycle_id") && currentProject?.cycle_view === true && cycles !== undefined,
         filterIcon: CyclesOutline,
         getOptionIcon: (cycleGroup) => <CycleGroupIcon cycleGroup={cycleGroup} className="h-3.5 w-3.5 flex-shrink-0" />,
         cycles: cycles ?? [],
         ...operatorConfigs,
       }),
-    [isFilterEnabled, project?.cycle_view, cycles, operatorConfigs]
+    [isFilterEnabled, currentProject?.cycle_view, cycles, operatorConfigs]
   );
 
   // module filter config
   const moduleFilterConfig = useMemo(
     () =>
       getModuleFilterConfig<TWorkItemFilterProperty>("module_id")({
-        isEnabled: isFilterEnabled("module_id") && project?.module_view === true && modules !== undefined,
+        isEnabled: isFilterEnabled("module_id") && currentProject?.module_view === true && modules !== undefined,
         filterIcon: ModuleOutline,
         getOptionIcon: () => <ModuleOutline className="h-3 w-3 flex-shrink-0" />,
         modules: modules ?? [],
         ...operatorConfigs,
       }),
-    [isFilterEnabled, project?.module_view, modules, operatorConfigs]
+    [isFilterEnabled, currentProject?.module_view, modules, operatorConfigs]
   );
 
   // assignee filter config
@@ -360,7 +390,7 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
         isEnabled: isFilterEnabled("project_id") && projects !== undefined,
         filterIcon: ProjectsOutline,
         projects: projects,
-        getOptionIcon: (project) => <Logo logo={project.logo_props} size={12} />,
+        getOptionIcon: (projectItem) => <Logo logo={projectItem.logo_props} size={12} />,
         ...operatorConfigs,
       }),
     [isFilterEnabled, projects, operatorConfigs]
@@ -384,6 +414,8 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       updatedAtFilterConfig,
       createdByFilterConfig,
       subscriberFilterConfig,
+      blockedFilterConfig,
+      blockingFilterConfig,
     ],
     configMap: {
       project_id: projectFilterConfig,
@@ -401,6 +433,8 @@ export const useWorkItemFiltersConfig = (props: TUseWorkItemFiltersConfigProps):
       target_date: targetDateFilterConfig,
       created_at: createdAtFilterConfig,
       updated_at: updatedAtFilterConfig,
+      is_blocked: blockedFilterConfig,
+      is_blocking: blockingFilterConfig,
     },
     isFilterEnabled,
     members: members ?? [],

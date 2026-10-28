@@ -154,6 +154,23 @@ test("invalid required fields and scheduled filters are blocked before requests"
   );
 });
 
+test("dependency actions require explicit directional endpoints", () => {
+  const draft = createBugDraft(resources);
+  draft.actions = [
+    {
+      type: "add_dependency",
+      relation_type: "blocking",
+      source_mode: "triggering",
+      target_mode: "specific",
+    },
+  ];
+  assert.throws(() => prepareRuleDefinition(draft, resources), /target work item/);
+  draft.actions[0].target_id = "target";
+  const action = prepareRuleDefinition(draft, resources).actions[0];
+  assert.equal(action.source_mode, "triggering");
+  assert.equal(action.target_id, "target");
+});
+
 test("save-and-enable uses returned saved ID and revision, then returns enabled rule", async () => {
   const draft = createBugDraft(resources);
   const existing: AutomationRule = { ...draft, id: "existing", revision: 3, enabled: true };

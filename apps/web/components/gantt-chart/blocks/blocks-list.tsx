@@ -7,6 +7,7 @@
 //
 import type { IBlockUpdateDependencyData } from "@plane/types";
 import { GanttChartBlock } from "@/components/gantt-chart/blocks/block";
+import { GanttDependencyLines } from "@/components/gantt-chart/blocks/dependency-lines";
 
 export type GanttChartBlocksProps = {
   blockIds: string[];
@@ -35,6 +36,7 @@ export function GanttChartBlocksList(props: GanttChartBlocksProps) {
 
   return (
     <>
+      {enableDependency && <GanttDependencyLines blockIds={blockIds} />}
       {blockIds?.map((blockId) => (
         <GanttChartBlock
           key={blockId}

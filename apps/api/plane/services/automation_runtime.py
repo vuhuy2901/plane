@@ -453,6 +453,9 @@ def prepare_actions(rule, issue, event, action_index=None):
             serializer.is_valid(raise_exception=True)
             prepared.append(("create", (serializer, action)))
             continue
+        elif kind in {"add_dependency", "remove_dependency"}:
+            prepared.append(("dependency", action))
+            continue
         serializer = IssueCreateSerializer(
             target_issue,
             data=data,
@@ -571,12 +574,33 @@ def execute_candidate(event, candidate):
                             if action.get("relation"):
                                 create_relation(created, issue, action["relation"], rule.execution_actor)
                             changed = True
-                        step.update(done=True, changed=kind != "skip")
+                        elif kind == "dependency":
+                            action = value
+                            source = resolve_dependency_issue(action, "source", issue, progress, index)
+                            target = resolve_dependency_issue(action, "target", issue, progress, index)
+                            dependency_changed = mutate_dependency(
+                                source,
+                                target,
+                                action["relation_type"],
+                                add=action["type"] == "add_dependency",
+                                actor=rule.execution_actor,
+                            )
+                            step.update(
+                                source_issue_id=str(source.id),
+                                target_issue_id=str(target.id),
+                                relation_type=action["relation_type"],
+                                changed=dependency_changed,
+                            )
+                            changed = changed or dependency_changed
+                        step.update(done=True, changed=step.get("changed", kind != "skip"))
                     ProjectAutomationEvent.objects.filter(pk=event.pk).update(progress=event.progress)
                     status, detail = (
                         ("success", "Actions completed")
                         if changed
-                        else ("skipped", "; ".join(str(v) for k, v in prepared if k == "skip"))
+                        else (
+                            "skipped",
+                            "; ".join(str(v) for k, v in prepared if k == "skip") or "Actions made no changes.",
+                        )
                     )
                 finally:
                     automation_origin.reset(token)
@@ -607,20 +631,76 @@ def execution_snapshot(event, definition):
 
 
 def create_relation(created, source, relation, actor):
+    mutate_dependency(created, source, relation, add=True, actor=actor)
+
+
+def resolve_dependency_issue(action, side, triggering, progress, action_index):
+    mode = action[f"{side}_mode"]
+    if mode == "triggering":
+        return triggering
+    if mode == "specific":
+        target = Issue.issue_objects.filter(
+            pk=action[f"{side}_id"], project=triggering.project, workspace=triggering.workspace
+        ).first()
+        if target is None:
+            raise ValidationError(f"The selected {side} Work Item is no longer available in this project.")
+        return target
+    for previous_index in range(action_index - 1, -1, -1):
+        created_id = progress.get(str(previous_index), {}).get("created_issue_id")
+        if created_id:
+            target = Issue.issue_objects.filter(pk=created_id, project=triggering.project).first()
+            if target:
+                return target
+    raise ValidationError(f"The {side} requires a Create Work Item action earlier in this rule.")
+
+
+def canonical_dependency(source, target, relation_type, actor):
     from plane.db.models import IssueRelation
     from plane.db.models.issue import IssueRelationChoices
 
     pairs = dict(IssueRelationChoices._RELATION_PAIRS)
     reverse = {value: key for key, value in pairs.items() if value != key}
-    # Plane stores Task BLOCKED_BY Bug for Created Bug BLOCKS Source Task.
-    left, right, stored = (source, created, reverse[relation]) if relation in reverse else (created, source, relation)
-    existing, _ = IssueRelation.objects.get_or_create(
+    left, right, stored = (
+        (target, source, reverse[relation_type])
+        if relation_type in reverse
+        else (source, target, relation_type)
+    )
+    return IssueRelation(
         issue=left,
         related_issue=right,
-        defaults={"project": source.project, "relation_type": stored, "created_by": actor},
+        project=left.project,
+        workspace=left.workspace,
+        relation_type=stored,
+        created_by=actor,
+        updated_by=actor,
     )
-    if existing.relation_type != stored:
-        raise ValidationError("A different relation already exists between these Work Items.")
+
+
+def mutate_dependency(source, target, relation_type, *, add, actor):
+    from plane.db.models import IssueRelation
+    from plane.services.automation_events import bulk_create_relations
+    from plane.services.issue_relations import validate_relation_candidates
+
+    if source.id == target.id:
+        raise ValidationError("A Work Item cannot have a dependency with itself.")
+    if source.workspace_id != target.workspace_id:
+        raise ValidationError("Dependency Work Items must belong to the same workspace.")
+    candidate = canonical_dependency(source, target, relation_type, actor)
+    existing = IssueRelation.objects.filter(
+        issue_id=candidate.issue_id,
+        related_issue_id=candidate.related_issue_id,
+        relation_type=candidate.relation_type,
+    ).first()
+    if not add:
+        if existing is None:
+            return False
+        existing.delete()
+        return True
+    pending = validate_relation_candidates([candidate], allow_existing=True)
+    if not pending:
+        return False
+    bulk_create_relations(pending, ignore_conflicts=True)
+    return True
 
 
 def process_event(event_id):

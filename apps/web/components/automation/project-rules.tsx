@@ -1,3 +1,4 @@
+/* oxlint-disable eslint-plugin-react/no-array-index-key */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Button } from "@makeplane/propel/components/button";
@@ -21,6 +22,7 @@ import type { AutomationEditorOptions } from "./rule-routing";
 import {
   automationError,
   historyCreatedWorkItemIds,
+  historyDependencyChanges,
   historyTriggerMismatch,
   sourceTransitionHint,
 } from "./rule-presentation";
@@ -43,6 +45,8 @@ const actions: Record<string, string> = {
   add_comment: "Add Comment",
   set_due_date: "Set Due Date",
   create_work_item: "Create Work Item",
+  add_dependency: "Add Dependency",
+  remove_dependency: "Remove Dependency",
 };
 const fields: Record<string, string> = {
   work_item_type: "Work Item Type",
@@ -393,7 +397,7 @@ function ProjectAutomationRulesForProject({
           automationNotice: enableFailed
             ? `Rule saved, but it remains disabled. Enable failed: ${automationError(result.enableError)} Retry Enable on the saved rule below.`
             : enable
-              ? "Rule saved and enabled. It will run on future matching source events."
+              ? "Rule saved and enabled. It will run when a future trigger and all conditions match."
               : "Rule saved and disabled. Run a dry-run, then Enable when ready.",
           automationNoticeIsError: enableFailed,
         },
@@ -507,7 +511,7 @@ function ProjectAutomationRulesForProject({
         <h2 className="text-lg font-semibold">{tr("title", "Automations")}</h2>
       )}
       <p className="text-sm my-2 text-secondary">
-        Choose the source event in When, filter source work items in If, and choose what happens in Then.
+        Choose what starts the rule in When, narrow it with conditions in If, and choose what happens in Then.
       </p>
       {resourcesStatus === "loading" && <p role="status">Loading project resources...</p>}
       {resourcesStatus === "error" && (
@@ -612,13 +616,13 @@ function ProjectAutomationRulesForProject({
                 <RuleSummary definition={draft} resources={resources} />
               </details>
               <div className="space-y-3 border-l-2 border-subtle pl-4">
-                <h3 className="font-semibold">When · Source event</h3>
+                <h3 className="font-semibold">When · Trigger</h3>
                 <p className="text-sm text-secondary">
-                  This event happens to the source work item. To create a Bug when a Task moves back from testing,
-                  choose State Changed here, select From and To states, and add Task as the source type in If.
+                  The trigger starts this rule. Choose Work Item Updated for a field edit, or State Changed when the
+                  workflow state moves from one value to another.
                 </p>
                 <Select
-                  label="Source event"
+                  label="Trigger"
                   value={draft.trigger}
                   options={mapOptions(triggers)}
                   onChange={(trigger) =>
@@ -634,7 +638,7 @@ function ProjectAutomationRulesForProject({
                 />
                 {draft.trigger === "created" && (
                   <Select
-                    label="Source work item type"
+                    label="Work item type"
                     optional
                     options={resources.types}
                     availability={resourcesStatus}
@@ -822,10 +826,9 @@ function ProjectAutomationRulesForProject({
                 )}
               </div>
               <div className="space-y-3 border-l-2 border-subtle pl-4">
-                <h3 className="font-semibold">If · Source work item conditions</h3>
+                <h3 className="font-semibold">If · Conditions</h3>
                 <p className="text-sm text-secondary">
-                  All conditions must match (AND). These filter the source work item, including its type. With no
-                  conditions, any source work item can match.
+                  All conditions must match (AND). With no conditions, any work item can match the trigger.
                 </p>
                 {conditionEditor(draft.conditions, (conditions) => setDraft({ ...draft, conditions }))}
               </div>
@@ -850,7 +853,14 @@ function ProjectAutomationRulesForProject({
                               ? { type, mode: "relative", days: 3, timezone: resources.timezone ?? "UTC" }
                               : type === "manage_labels"
                                 ? { type, operation: "add" }
-                                : { type }
+                                : ["add_dependency", "remove_dependency"].includes(type)
+                                  ? {
+                                      type,
+                                      relation_type: "blocking",
+                                      source_mode: "triggering",
+                                      target_mode: "specific",
+                                    }
+                                  : { type }
                         )
                       }
                     />
@@ -1085,6 +1095,68 @@ function ProjectAutomationRulesForProject({
                         />
                       </>
                     )}
+                    {["add_dependency", "remove_dependency"].includes(action.type) && (
+                      <>
+                        <Select
+                          label="Dependency Type"
+                          options={(resources.catalog?.relations ?? []).map((id) => ({
+                            id,
+                            name:
+                              id === "blocking"
+                                ? "Source blocks target"
+                                : id === "blocked_by"
+                                  ? "Source is blocked by target"
+                                  : id.replaceAll("_", " "),
+                          }))}
+                          value={action.relation_type}
+                          onChange={(relation_type) => patchAction(index, { ...action, relation_type })}
+                        />
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {(["source", "target"] as const).map((side) => {
+                            const modeKey = `${side}_mode` as "source_mode" | "target_mode";
+                            const idKey = `${side}_id` as "source_id" | "target_id";
+                            const mode = action[modeKey];
+                            const hasCreatedWorkItem = draft.actions
+                              .slice(0, index)
+                              .some((candidate) => candidate.type === "create_work_item");
+                            return (
+                              <div key={side} className="space-y-3 rounded border border-subtle p-3">
+                                <Select
+                                  label={side === "source" ? "From Work Item" : "To Work Item"}
+                                  options={[
+                                    { id: "triggering", name: "Triggering work item" },
+                                    ...(hasCreatedWorkItem
+                                      ? [{ id: "created", name: "Work item created by an earlier action" }]
+                                      : []),
+                                    { id: "specific", name: "Specific work item" },
+                                  ]}
+                                  value={mode}
+                                  onChange={(value) =>
+                                    patchAction(index, {
+                                      ...action,
+                                      [modeKey]: value as "triggering" | "created" | "specific",
+                                      [idKey]: undefined,
+                                    })
+                                  }
+                                />
+                                {mode === "specific" && (
+                                  <Select
+                                    label={side === "source" ? "Source Work Item" : "Target Work Item"}
+                                    options={resources.work_items}
+                                    value={action[idKey]}
+                                    onChange={(value) => patchAction(index, { ...action, [idKey]: value })}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-sm text-secondary">
+                          Source and target describe the dependency direction. Removing a missing dependency is safe and
+                          leaves the rule successful.
+                        </p>
+                      </>
+                    )}
                     {button(
                       "Remove Action",
                       () => setDraft({ ...draft, actions: draft.actions.filter((_, i) => i !== index) }),
@@ -1249,6 +1321,19 @@ function ProjectAutomationRulesForProject({
                 >
                   Created Work Item
                 </a>
+              ))}
+              {historyDependencyChanges(row).map((dependency) => (
+                <p key={dependency.stepId} className="text-sm text-secondary">
+                  {dependency.changed ? "Dependency updated" : "Dependency already in requested state"}:{" "}
+                  <a className="text-accent" href={`/${w}/projects/${p}/issues/${dependency.sourceId}`}>
+                    source
+                  </a>{" "}
+                  →{" "}
+                  <a className="text-accent" href={`/${w}/projects/${p}/issues/${dependency.targetId}`}>
+                    target
+                  </a>{" "}
+                  ({dependency.relationType.replaceAll("_", " ")})
+                </p>
               ))}
               <details className="text-sm mt-3" open={row.status === "skipped" || row.status === "failed"}>
                 <summary className="cursor-pointer font-medium">

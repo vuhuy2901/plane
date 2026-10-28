@@ -1069,14 +1069,14 @@ class IssueDetailEndpoint(BaseAPIView):
                 issue = issue.prefetch_related(
                     Prefetch(
                         "issue_relation",
-                        queryset=IssueRelation.objects.select_related("related_issue"),
+                        queryset=IssueRelation.objects.select_related("related_issue", "related_issue__state"),
                     )
                 )
             if "issue_related" in self.expand:
                 issue = issue.prefetch_related(
                     Prefetch(
                         "issue_related",
-                        queryset=IssueRelation.objects.select_related("issue"),
+                        queryset=IssueRelation.objects.select_related("issue", "issue__state"),
                     )
                 )
 

@@ -33,6 +33,15 @@ def validate_definition(project, data):
         }.items():
             if key in action:
                 resources.append({"field": field, "value": action[key]})
+        if action["type"] in {"add_dependency", "remove_dependency"}:
+            for side in ("source", "target"):
+                if action[f"{side}_mode"] == "specific" and not Issue.issue_objects.filter(
+                    project=project,
+                    pk=action[f"{side}_id"],
+                ).exists():
+                    raise ValidationError(
+                        {"actions": f"The selected {side} Work Item does not belong to this project."}
+                    )
     for condition in resources:
         field, value = condition["field"], condition.get("value")
         if value is None or field in {"priority", "due_date"} or (field == "state" and value.startswith("group:")):

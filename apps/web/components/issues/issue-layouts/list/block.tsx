@@ -25,6 +25,7 @@ import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
 import { IssueProperties } from "@/components/issues/issue-layouts/properties";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
 import { WorkItemTypeBadge } from "@/components/dropdowns/work-item-type/work-item-type-badge";
+import { IssueDependencyBadges } from "@/components/issues/issue-dependency-badges";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -270,6 +271,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
             <Tooltip label={issue.name} layout="stacked" align="start" disabled={isCurrentBlockDragging || isMobile}>
               <p className="cursor-pointer truncate text-body-xs-medium text-primary">{issue.name}</p>
             </Tooltip>
+            <IssueDependencyBadges issue={issue} />
           </div>
           {!issue?.tempId && (
             <div

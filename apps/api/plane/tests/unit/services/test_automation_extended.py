@@ -49,7 +49,8 @@ def rule_for(runtime, trigger, options=None, actions=None, conditions=None):
 
 def test_public_catalog_has_exact_scope():
     assert len(TRIGGERS) == 8
-    assert len(ACTIONS) == len(OPERATORS) == 7
+    assert len(ACTIONS) == 9
+    assert len(OPERATORS) == 7
     assert "completed" not in TRIGGERS
 
 
@@ -224,6 +225,61 @@ def test_relation_failure_retries_existing_bug_instead_of_creating_another(runti
     process_event(event.id)
     assert Issue.objects.get(name="Bug: Automation item").id == created_id
     assert IssueRelation.objects.count() == 1
+
+
+def test_add_and_remove_dependency_actions_are_directional_and_idempotent(runtime):
+    project, _, source = runtime
+    target = Issue.objects.create(project=project, name="Target", state=source.state)
+    actions = [
+        {
+            "type": "add_dependency",
+            "relation_type": "blocking",
+            "source_mode": "triggering",
+            "target_mode": "specific",
+            "target_id": str(target.id),
+        },
+        {
+            "type": "remove_dependency",
+            "relation_type": "blocking",
+            "source_mode": "triggering",
+            "target_mode": "specific",
+            "target_id": str(target.id),
+        },
+    ]
+    _, event = make_event(runtime, actions)
+
+    process_event(event.id)
+
+    assert not IssueRelation.objects.filter(issue=target, related_issue=source, relation_type="blocked_by").exists()
+    execution = ProjectAutomationExecution.objects.get(event=event)
+    assert execution.status == "success"
+    assert execution.snapshot["steps"][str(execution.rule_id)]["0"]["source_issue_id"] == str(source.id)
+
+
+def test_dependency_action_can_use_work_item_created_by_previous_action(runtime):
+    project, _, source = runtime
+    bug_type = IssueType.objects.create(workspace=project.workspace, name="Regression Bug")
+    ProjectIssueType.objects.create(project=project, issue_type=bug_type)
+    actions = [
+        {
+            "type": "create_work_item",
+            "type_id": str(bug_type.id),
+            "title": "Created dependency",
+            "priority": "high",
+        },
+        {
+            "type": "add_dependency",
+            "relation_type": "blocking",
+            "source_mode": "created",
+            "target_mode": "triggering",
+        },
+    ]
+    _, event = make_event(runtime, actions)
+
+    process_event(event.id)
+
+    created = Issue.objects.get(name="Created dependency")
+    assert IssueRelation.objects.filter(issue=source, related_issue=created, relation_type="blocked_by").exists()
 
 
 def test_remove_label_and_fixed_due_date(runtime):

@@ -377,6 +377,20 @@ class IssueCreateSerializer(BaseSerializer):
             if requested_state is None and get_effective_workflow_version(instance) is not None:
                 raise serializers.ValidationError({"state_id": "A workflow-managed state cannot be cleared."})
             if requested_state is not None:
+                if (
+                    requested_state.group == "completed"
+                    and instance.state.group != "completed"
+                    and instance.project.prevent_blocked_issue_completion
+                    and IssueRelation.objects.filter(
+                        issue=instance,
+                        relation_type="blocked_by",
+                    )
+                    .exclude(related_issue__state__group="completed")
+                    .exists()
+                ):
+                    raise serializers.ValidationError(
+                        {"state_id": "Complete the active blocking Work Items before completing this Work Item."}
+                    )
                 transition_id = self.initial_data.get("transition_id") if hasattr(self, "initial_data") else None
                 try:
                     transitioned_issue, _ = transition_issue(
@@ -1038,6 +1052,7 @@ class IssueListDetailSerializer(serializers.Serializer):
                             "name": related_issue.name,
                             "relation_type": relation.relation_type,
                             "state_id": related_issue.state_id,
+                            "state_group": related_issue.state.group if related_issue.state_id else None,
                             "type_id": related_issue.type_id,
                             "priority": related_issue.priority,
                             "created_by": related_issue.created_by_id,
@@ -1064,6 +1079,7 @@ class IssueListDetailSerializer(serializers.Serializer):
                             "name": issue.name,
                             "relation_type": relation.relation_type,
                             "state_id": issue.state_id,
+                            "state_group": issue.state.group if issue.state_id else None,
                             "type_id": issue.type_id,
                             "priority": issue.priority,
                             "created_by": issue.created_by_id,

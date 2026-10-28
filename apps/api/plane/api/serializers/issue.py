@@ -304,6 +304,20 @@ class IssueSerializer(BaseSerializer):
             if requested_state is None and get_effective_workflow_version(instance) is not None:
                 raise serializers.ValidationError({"state": "A workflow-managed state cannot be cleared."})
             if requested_state is not None:
+                if (
+                    requested_state.group == "completed"
+                    and instance.state.group != "completed"
+                    and instance.project.prevent_blocked_issue_completion
+                    and IssueRelation.objects.filter(
+                        issue=instance,
+                        relation_type="blocked_by",
+                    )
+                    .exclude(related_issue__state__group="completed")
+                    .exists()
+                ):
+                    raise serializers.ValidationError(
+                        {"state": "Complete the active blocking Work Items before completing this Work Item."}
+                    )
                 transition_id = self.initial_data.get("transition_id") if hasattr(self, "initial_data") else None
                 try:
                     transitioned_issue, _ = transition_issue(
