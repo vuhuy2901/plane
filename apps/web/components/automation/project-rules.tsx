@@ -595,7 +595,6 @@ function ProjectAutomationRulesForProject({
           {!isEditor && (
             <div className="flex flex-wrap gap-2">
               {button("Create rule", () => navigate(paths.create), false, true)}
-              {button("Create Bug starter", () => navigate(paths.bug), Boolean(draft) || resourcesStatus !== "ready")}
             </div>
           )}
           {draft && (
