@@ -1,5 +1,5 @@
 # ==============================================================================
-# Script phuc hoi toan bo Co so du lieu Plane tu file SQL backup
+# Script phục hồi toàn bộ Cơ sở dữ liệu Plane từ file SQL backup
 # ==============================================================================
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -39,8 +39,12 @@ if (-not $ready) {
 }
 
 Write-Host "[2/2] Dang nap du lieu tu $BackupFile vao database 'plane'..." -ForegroundColor Yellow
-Get-Content -LiteralPath "$BackupFile" -Raw | docker compose -f docker-compose-local.yml exec -T plane-db psql -U plane -d plane
+$containerId = (docker compose -f docker-compose-local.yml ps -q plane-db).Trim()
+docker cp "$BackupFile" "${containerId}:/tmp/plane_restore_temp.sql"
+docker exec $containerId psql -U plane -d plane -f /tmp/plane_restore_temp.sql
+docker exec $containerId rm -f /tmp/plane_restore_temp.sql
 
 Write-Host "======================================================" -ForegroundColor Green
 Write-Host " PHUC HOI HOAN TAT THANH CONG!" -ForegroundColor Green
+Write-Host " Data da san sang (Workspaces, Projects, Issues, Users)" -ForegroundColor Green
 Write-Host "======================================================" -ForegroundColor Green

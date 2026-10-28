@@ -8,6 +8,8 @@
 - `pnpm check:lint` - OxLint across all packages
 - `pnpm check:types` - TypeScript type checking
 - `pnpm fix` - Auto-fix format and lint issues
+- `pnpm db:restore` - Restore pre-seeded Docker PostgreSQL database (from `backups/plane_database_backup.sql`)
+- `pnpm db:backup` - Dump current Docker PostgreSQL database to `backups/plane_database_backup.sql`
 - `pnpm turbo run <command> --filter=<package>` - Target specific package/app
 
 ## Code Style
@@ -43,3 +45,26 @@ Prereq (once): `./setup.sh` — generates `apps/api/.env` from `.env.example`.
 - Teardown: `docker compose -f docker-compose-test.yml down -v`
 
 See `apps/api/tests/RUNNING_TESTS.md` for the full walkthrough and troubleshooting; see `apps/api/tests/TESTING_GUIDE.md` for test conventions and fixtures.
+
+## Pre-seeded Database & Team Dataset (For Agents)
+
+A production-accurate team dataset is bundled in `backups/plane_database_backup.sql`.
+
+- **Dataset contents**: 7 Users (see credentials in `LOCAL_TEAM_ACCOUNTS.txt`), 2 Workspaces (`qldapm`, `qlda`), 5 Projects (`QLDAPM-Final`, `Quản lí dự án`, `Hệ thống ECommerce`, `Bán Hàng`, `QLDA`), and 391 Issues / Work Items with states, cycles, and modules.
+- **When spinning up a new development environment or when an agent requires the pre-existing dataset**:
+  1. Ensure the PostgreSQL container is running:
+     ```bash
+     docker compose -f docker-compose-local.yml up -d plane-db
+     ```
+  2. Restore the dataset in one step:
+     ```bash
+     pnpm db:restore
+     # Alternatively on Linux/macOS:
+     bash backups/restore_docker_data.sh
+     # Alternatively on Windows PowerShell:
+     .\backups\restore_docker_data.ps1
+     ```
+- **To update the dataset after creating new test data**:
+  ```bash
+  pnpm db:backup
+  ```

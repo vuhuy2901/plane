@@ -18,6 +18,8 @@
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
     "prepare": "husky",
+    "db:restore": "node -e \"const isWin=process.platform==='win32'; const {execSync}=require('child_process'); execSync(isWin ? 'powershell -ExecutionPolicy Bypass -File ./backups/restore_docker_data.ps1' : 'bash ./backups/restore_docker_data.sh', {stdio:'inherit'});\"",
+    "db:backup": "node -e \"const isWin=process.platform==='win32'; const {execSync}=require('child_process'); execSync(isWin ? 'powershell -ExecutionPolicy Bypass -File ./backups/backup_docker_data.ps1' : 'bash ./backups/backup_docker_data.sh', {stdio:'inherit'});\"",
     "doctor": "npx react-doctor@latest"
   },
   "devDependencies": {

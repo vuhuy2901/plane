@@ -1,5 +1,5 @@
 # ==============================================================================
-# Script sao luu toan bo Co so du lieu va du lieu Docker cua Plane
+# Script sao lưu toàn bộ Cơ sở dữ liệu và dữ liệu Docker của Plane
 # ==============================================================================
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -47,17 +47,21 @@ if (-not $ready) {
     exit 1
 }
 
-# 3. Xuat file SQL Backup
+# 3. Xuat file SQL Backup (Chuan UTF-8 khong bi loi font qua docker cp)
 $BackupFile = "$ScriptDir\plane_database_backup.sql"
 Write-Host "[3/3] Dang xuat PostgreSQL Database ra: $BackupFile ..." -ForegroundColor Yellow
-docker compose -f docker-compose-local.yml exec -T plane-db pg_dump -U plane plane > "$BackupFile"
+
+$containerId = (docker compose -f docker-compose-local.yml ps -q plane-db).Trim()
+docker exec $containerId pg_dump -U plane -d plane --clean --if-exists -f /tmp/plane_backup_temp.sql
+docker cp "${containerId}:/tmp/plane_backup_temp.sql" "$BackupFile"
+docker exec $containerId rm -f /tmp/plane_backup_temp.sql
 
 if (Test-Path "$BackupFile") {
     $size = (Get-Item "$BackupFile").Length
     Write-Host "======================================================" -ForegroundColor Green
     Write-Host " SAO LUU THANH CONG!" -ForegroundColor Green
     Write-Host " File: $BackupFile" -ForegroundColor Green
-    Write-Host " Dung luong: $([math]::Round($size / 1KB, 2)) KB" -ForegroundColor Green
+    Write-Host " Dung luong: $([math]::Round($size / 1MB, 2)) MB" -ForegroundColor Green
     Write-Host "======================================================" -ForegroundColor Green
 } else {
     Write-Host "Loi: Khong tim thay file backup sau khi xuat." -ForegroundColor Red

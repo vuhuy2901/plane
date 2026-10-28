@@ -89,6 +89,7 @@ if [ "$success" = true ]; then
     echo -e "${BOLD}Next steps:${NC}"
     echo -e "1. Review the .env files in each folder if needed"
     echo -e "2. Start the services with: ${BOLD}docker compose -f docker-compose-local.yml up -d${NC}"
+    echo -e "3. (Optional) Restore pre-seeded team dataset with: ${BOLD}pnpm db:restore${NC} (or ${BOLD}bash backups/restore_docker_data.sh${NC})"
     echo -e "\n${GREEN}Happy coding! 🚀${NC}"
 else
     echo -e "${RED}✗${NC} Some issues occurred during setup. Please check the errors above.\n"
