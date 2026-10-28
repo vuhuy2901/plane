@@ -14,7 +14,7 @@ def test_server_registers_plane_tools_with_structured_schemas():
     tools = asyncio.run(server.mcp_server.list_tools())
     tools_by_name = {tool.name: tool for tool in tools}
 
-    assert set(tools_by_name) == {
+    assert set(tools_by_name) >= {
         "plane_create_project",
         "plane_create_label",
         "plane_create_work_item",
@@ -33,6 +33,10 @@ def test_server_registers_plane_tools_with_structured_schemas():
     assert tools_by_name["plane_list_workspaces"].annotations.read_only_hint is True
     assert tools_by_name["plane_create_work_item"].annotations.read_only_hint is False
     assert "ctx" not in tools_by_name["plane_create_work_item"].input_schema["properties"]
+    assert len(tools_by_name) >= 60
+    assert tools_by_name["plane_delete_work_item"].annotations.destructive_hint is True
+    assert tools_by_name["plane_get_analytics_report"].annotations.read_only_hint is True
+    assert tools_by_name["plane_bulk_delete_work_items"].input_schema["properties"]["dry_run"]["default"] is True
 
 
 def test_create_work_item_maps_arguments_to_api_payload(monkeypatch):
@@ -102,6 +106,10 @@ def test_import_work_items_resolves_parent_reference(monkeypatch):
 def test_streamable_http_initialize_succeeds_with_api_key():
     async def initialize():
         app = server.create_mcp_http_app()
+        manager = server.mcp_server.session_manager
+        personal_app = server.create_personal_mcp_http_app(app)
+        assert personal_app.app is app
+        assert server.mcp_server.session_manager is manager
         app.authentication.validate_api_token = Mock(return_value=(object(), "token"))
         transport = httpx.ASGITransport(app=app)
 

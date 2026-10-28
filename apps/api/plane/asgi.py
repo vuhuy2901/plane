@@ -16,7 +16,7 @@ from plane.mcp import create_mcp_http_app, create_personal_mcp_http_app, mcp_ser
 
 set_plane_api_application(django_asgi_app)
 mcp_http_app = create_mcp_http_app()
-personal_mcp_http_app = create_personal_mcp_http_app()
+personal_mcp_http_app = create_personal_mcp_http_app(mcp_http_app)
 
 
 class PlaneASGIApplication:
