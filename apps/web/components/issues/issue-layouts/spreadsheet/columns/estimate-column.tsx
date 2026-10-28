@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import type { TIssue } from "@plane/types";
 // components
 import { EstimateSelect } from "@/components/dropdowns/estimate/estimate-select";
+import { displayedEstimate, usesHierarchicalEstimate } from "@/store/issue/helpers/hierarchical-estimate";
 
 type Props = {
   issue: TIssue;
@@ -22,19 +23,25 @@ export const SpreadsheetEstimateColumn = observer(function SpreadsheetEstimateCo
 
   return (
     <div className="h-11 border-b-[0.5px] border-subtle">
-      <EstimateSelect
-        value={issue.estimate_point || undefined}
-        onChange={(data) =>
-          onChange(issue, { estimate_point: data }, { changed_property: "estimate_point", change_details: data })
-        }
-        placeholder="Estimate"
-        projectId={issue.project_id ?? undefined}
-        disabled={disabled}
-        onClose={onClose}
-        // `.clickable` is what the table's keyboard navigation clicks on Enter / Space in a focused cell.
-        className="clickable"
-        variant="table-cell"
-      />
+      {usesHierarchicalEstimate(issue) ? (
+        <div className="flex h-full items-center px-3 text-13 font-medium text-secondary">
+          {displayedEstimate(issue)} pts
+        </div>
+      ) : (
+        <EstimateSelect
+          value={issue.estimate_point || undefined}
+          onChange={(data) =>
+            onChange(issue, { estimate_point: data }, { changed_property: "estimate_point", change_details: data })
+          }
+          placeholder="Estimate"
+          projectId={issue.project_id ?? undefined}
+          disabled={disabled}
+          onClose={onClose}
+          // `.clickable` is what the table's keyboard navigation clicks on Enter / Space in a focused cell.
+          className="clickable"
+          variant="table-cell"
+        />
+      )}
     </div>
   );
 });

@@ -28,6 +28,7 @@ from plane.db.models import (
     State,
 )
 from plane.utils.date_utils import get_analytics_filters
+from plane.services.estimate_analytics import build_estimate_analytics
 
 
 REPORT_MAX_DAYS = 366
@@ -140,11 +141,16 @@ class WorkspaceReportEndpoint(BaseAPIView):
             return Response({"message": "Invalid priorities"}, status=status.HTTP_400_BAD_REQUEST)
         if priorities:
             issues = issues.filter(priority__in=priorities)
-        if count_mode == "top_level":
-            issues = issues.filter(parent__isnull=True)
-
         # Date filters scope KPI populations by creation date. Event charts use
         # the same population so cards and charts keep one filter meaning.
+        completion_scope = issues.order_by().distinct()
+        current_estimate_scope = completion_scope.filter(
+            created_at__date__gte=range_start,
+            created_at__date__lte=range_end,
+        )
+        issues = current_estimate_scope
+        if count_mode == "top_level":
+            issues = issues.filter(parent__isnull=True)
         issues = (
             issues.filter(
                 created_at__date__gte=range_start,
@@ -437,6 +443,14 @@ class WorkspaceReportEndpoint(BaseAPIView):
             "average_execution_seconds": None,
             "average_execution_time_status": "insufficient_data",
         }
+        estimate_analytics = build_estimate_analytics(
+            current_scope=current_estimate_scope,
+            completion_scope=completion_scope,
+            projects=projects,
+            cycles=cycles,
+            range_start=range_start,
+            range_end=range_end,
+        )
 
         return Response(
             {
@@ -448,6 +462,7 @@ class WorkspaceReportEndpoint(BaseAPIView):
                     "count_mode": count_mode,
                     "reference_date": reference_date,
                     "member_allocation": "full_count_per_assignee",
+                    "estimate_member_allocation": "equal_share",
                     "limits": {
                         "max_days": REPORT_MAX_DAYS,
                         "max_rows_per_dimension": 100,
@@ -502,6 +517,7 @@ class WorkspaceReportEndpoint(BaseAPIView):
                 "modules": progress(modules, ModuleIssue, "module_id"),
                 "trend": trend,
                 "automation": automation,
+                "estimates": estimate_analytics,
                 "worklogs_available": False,
             }
         )

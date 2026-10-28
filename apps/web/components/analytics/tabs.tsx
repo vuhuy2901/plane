@@ -10,6 +10,7 @@ import {
   AnalyticsReports,
   AutomationAnalytics,
   CyclesAnalytics,
+  EstimatesAnalytics,
   MembersAnalytics,
   ModulesAnalytics,
   ProjectsAnalytics,
@@ -22,6 +23,7 @@ export const getAnalyticsTabs = (t: (key: string, params?: Record<string, any>) 
   const tabs: Record<TAnalyticsTab, Omit<AnalyticsTab, "key">> = {
     overview: { label: t("common.overview"), content: WorkspaceReport, isDisabled: false },
     "work-items": { label: t("sidebar.work_items"), content: WorkItems, isDisabled: false },
+    estimates: { label: "Estimates", content: EstimatesAnalytics, isDisabled: false },
     members: { label: "Members", content: MembersAnalytics, isDisabled: false },
     projects: { label: "Projects", content: ProjectsAnalytics, isDisabled: false },
     cycles: { label: "Cycles", content: CyclesAnalytics, isDisabled: false },

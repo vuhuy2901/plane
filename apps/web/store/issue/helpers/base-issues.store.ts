@@ -7,6 +7,7 @@
 import { isEqual, concat, get, indexOf, isEmpty, orderBy, pull, set, uniq, update, clone } from "lodash-es";
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
+import { mutate as mutateSWR } from "swr";
 // plane constants
 import { ALL_ISSUES, ISSUE_PRIORITIES } from "@plane/constants";
 // types
@@ -44,6 +45,7 @@ import {
   getSortOrderToFilterEmptyValues,
   getSubGroupIssueKeyActions,
 } from "./base-issues-utils";
+import { affectsHierarchicalEstimate, refreshHierarchicalEstimateChain } from "./hierarchical-estimate";
 import type { IBaseIssueFilterStore } from "./issue-filter-helper.store";
 
 export type TIssueDisplayFilterOptions = Exclude<TIssueGroupByOptions, null> | "target_date";
@@ -186,6 +188,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
 
   // services
   issueService;
+  hierarchicalIssueService;
   issueArchiveService;
   moduleService;
   cycleService;
@@ -253,6 +256,7 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     this.isArchived = isArchived;
 
     this.issueService = new IssueService(serviceType);
+    this.hierarchicalIssueService = new IssueService(EIssueServiceType.ISSUES);
     this.issueArchiveService = new IssueArchiveService();
     this.moduleService = new ModuleService();
     this.cycleService = new CycleService();
@@ -577,6 +581,17 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
 
       // call API to update the issue
       await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
+
+      if (affectsHierarchicalEstimate(data)) {
+        await refreshHierarchicalEstimateChain({
+          issueId,
+          previousParentId: issueBeforeUpdate?.parent_id,
+          fetchIssue: (hierarchyIssueId) =>
+            this.hierarchicalIssueService.retrieve(workspaceSlug, projectId, hierarchyIssueId),
+          applyIssue: (issue) => this.rootIssueStore.issues.addIssue([issue]),
+        });
+        void mutateSWR((key) => Array.isArray(key) && key[0] === "workspace-report");
+      }
 
       // call fetch Parent Stats
       this.fetchParentStats(workspaceSlug, projectId);

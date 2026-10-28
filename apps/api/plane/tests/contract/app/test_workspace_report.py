@@ -11,6 +11,10 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
+    Cycle,
+    CycleIssue,
+    Estimate,
+    EstimatePoint,
     Issue,
     IssueAssignee,
     IssueType,
@@ -157,3 +161,95 @@ def test_workspace_report_rejects_invalid_filters(session_client, workspace, par
 
     assert response.status_code == 400
     assert response.data["message"] == message
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_workspace_report_estimates_use_leaf_points_and_equal_member_allocation(workspace, create_user):
+    project = Project.objects.create(name="Points", identifier="PTS", workspace=workspace)
+    ProjectMember.objects.create(project=project, member=create_user, workspace=workspace, role=20)
+    estimate = Estimate.objects.create(
+        name="Project points", type="points", project=project, workspace=workspace, created_by=create_user
+    )
+    project.estimate = estimate
+    project.save(update_fields=["estimate"])
+    points = {
+        value: EstimatePoint.objects.create(
+            estimate=estimate,
+            key=index,
+            value=str(value),
+            project=project,
+            workspace=workspace,
+            created_by=create_user,
+        )
+        for index, value in enumerate((3, 5, 8, 13), start=1)
+    }
+    todo = State.objects.create(name="Todo", project=project, workspace=workspace, group="unstarted", default=True)
+    started = State.objects.create(name="Started", project=project, workspace=workspace, group="started")
+    done = State.objects.create(name="Done", project=project, workspace=workspace, group="completed")
+    cancelled = State.objects.create(name="Cancelled", project=project, workspace=workspace, group="cancelled")
+
+    epic = Issue.objects.create(
+        name="Epic", project=project, workspace=workspace, state=todo, estimate_point=points[13]
+    )
+    task = Issue.objects.create(
+        name="Task", project=project, workspace=workspace, state=started, parent=epic, estimate_point=points[8]
+    )
+    completed_subtask = Issue.objects.create(
+        name="Completed subtask",
+        project=project,
+        workspace=workspace,
+        state=done,
+        parent=task,
+        estimate_point=points[3],
+        completed_at=timezone.now(),
+    )
+    started_subtask = Issue.objects.create(
+        name="Started subtask",
+        project=project,
+        workspace=workspace,
+        state=started,
+        parent=task,
+        estimate_point=points[5],
+    )
+    standalone = Issue.objects.create(
+        name="Standalone", project=project, workspace=workspace, state=todo, estimate_point=points[8]
+    )
+    Issue.objects.create(name="Unestimated", project=project, workspace=workspace, state=todo)
+    Issue.objects.create(
+        name="Cancelled", project=project, workspace=workspace, state=cancelled, estimate_point=points[13]
+    )
+
+    second_member = User.objects.create(
+        email=f"estimate-{uuid4().hex}@plane.so", username=f"estimate-{uuid4().hex[:8]}"
+    )
+    IssueAssignee.objects.create(issue=completed_subtask, assignee=create_user, project=project, workspace=workspace)
+    IssueAssignee.objects.create(issue=completed_subtask, assignee=second_member, project=project, workspace=workspace)
+    cycle = Cycle.objects.create(name="Current cycle", project=project, workspace=workspace, owned_by=create_user)
+    for issue in (completed_subtask, started_subtask, standalone):
+        CycleIssue.objects.create(cycle=cycle, issue=issue, project=project, workspace=workspace)
+
+    client = APIClient()
+    client.force_authenticate(user=create_user)
+    response = client.get(f"/api/workspaces/{workspace.slug}/analytics-report/", {"date_filter": "last_30_days"})
+
+    assert response.status_code == 200, response.data
+    estimates = response.data["estimates"]
+    assert estimates["summary"] == {
+        "total_estimated_points": 16.0,
+        "completed_points": 3.0,
+        "remaining_points": 13.0,
+        "in_progress_points": 5.0,
+        "completion_rate": 18.75,
+        "coverage": 75.0,
+        "eligible_items": 4,
+        "estimated_items": 3,
+        "unestimated_items": 1,
+        "average_points": 5.33,
+    }
+    allocations = {str(row["assignee_id"]): row for row in estimates["members"]}
+    assert allocations[str(create_user.id)]["assigned_points"] == 1.5
+    assert allocations[str(second_member.id)]["assigned_points"] == 1.5
+    assert sum(row["assigned_points"] for row in estimates["members"]) == 16.0
+    assert estimates["cycles"][0]["current_scope_points"] == 16.0
+    assert estimates["cycles"][0]["completed_points"] == 3.0

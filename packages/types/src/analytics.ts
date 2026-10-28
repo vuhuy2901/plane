@@ -40,6 +40,7 @@ export enum ChartYAxisMetric {
 export type TAnalyticsTabsBase = "overview" | "work-items";
 export type TAnalyticsTab =
   | TAnalyticsTabsBase
+  | "estimates"
   | "members"
   | "projects"
   | "cycles"
@@ -85,6 +86,7 @@ export interface IWorkspaceReport {
     count_mode: TAnalyticsCountMode;
     reference_date: string;
     member_allocation: "full_count_per_assignee";
+    estimate_member_allocation: "equal_share";
     limits: { max_days: number; max_rows_per_dimension: number };
     limitations: string[];
   };
@@ -165,7 +167,81 @@ export interface IWorkspaceReport {
     average_execution_seconds: number | null;
     average_execution_time_status: "available" | "insufficient_data";
   };
+  estimates: TWorkspaceEstimateAnalytics;
   worklogs_available: boolean;
+}
+
+export interface TWorkspaceEstimateAnalytics {
+  configuration: {
+    points_projects: number;
+    incompatible_projects: {
+      id: string;
+      name: string;
+      identifier: string;
+      reason: "not_configured" | "non_points_estimate";
+    }[];
+    is_available: boolean;
+  };
+  summary: {
+    total_estimated_points: number;
+    completed_points: number;
+    remaining_points: number;
+    in_progress_points: number;
+    completion_rate: number;
+    coverage: number;
+    eligible_items: number;
+    estimated_items: number;
+    unestimated_items: number;
+    average_points: number;
+  };
+  progress: { group: "completed" | "started" | "unstarted" | "backlog"; points: number }[];
+  distribution: { value: number; label: string; work_items: number }[];
+  by_type: {
+    type_id: string | null;
+    type_name: string;
+    points: number;
+    estimated_items: number;
+    unestimated_items: number;
+  }[];
+  members: {
+    assignee_id: string | null;
+    assignee__display_name: string;
+    assignee__first_name: string;
+    assignee__last_name: string;
+    assigned_points: number;
+    completed_points: number;
+    remaining_points: number;
+    estimated_items: number;
+    unestimated_items: number;
+    allocation: "equal_share";
+  }[];
+  projects: {
+    id: string;
+    name: string;
+    identifier: string;
+    estimate_type: "points" | "categories" | null;
+    total_points: number;
+    completed_points: number;
+    remaining_points: number;
+    completion_rate: number;
+    estimated_items: number;
+    unestimated_items: number;
+  }[];
+  cycles: {
+    id: string;
+    name: string;
+    project_id: string;
+    project__name: string;
+    start_date: string | null;
+    end_date: string | null;
+    current_scope_points: number;
+    completed_points: number;
+    remaining_points: number;
+    completion_rate: number;
+    unestimated_items: number;
+    velocity_points: number;
+  }[];
+  completion_trend: { date: string; completed_points: number }[];
 }
 
 export interface TWorkspaceProgressRow {

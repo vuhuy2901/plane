@@ -17,6 +17,7 @@ import type { IWorkspaceReport, TWorkspaceProgressRow } from "@plane/types";
 import { useAnalytics } from "@/hooks/store/use-analytics";
 import { AnalyticsService } from "@/services/analytics.service";
 import AnalyticsWrapper from "./analytics-wrapper";
+import { normalizeWorkspaceEstimateAnalytics } from "./estimate-report-compat";
 import { exportRowsCSV } from "./export";
 
 const analyticsService = new AnalyticsService();
@@ -56,7 +57,14 @@ export function WorkspaceReportProvider({ children }: { children: ReactNode }) {
     // they belong to the newly selected filters.
     { keepPreviousData: false }
   );
-  const contextValue = useMemo(() => ({ slug, ...report }), [slug, report]);
+  const contextValue = useMemo(
+    () => ({
+      slug,
+      ...report,
+      data: report.data ? normalizeWorkspaceEstimateAnalytics(report.data) : undefined,
+    }),
+    [slug, report]
+  );
 
   return <WorkspaceReportContext.Provider value={contextValue}>{children}</WorkspaceReportContext.Provider>;
 }
@@ -231,6 +239,257 @@ function DataRange({ data }: { data: IWorkspaceReport }) {
   );
 }
 
+function EstimateConfigurationNotice({ data }: { data: IWorkspaceReport }) {
+  const incompatible = data.estimates.configuration.incompatible_projects;
+  if (!incompatible.length) return null;
+  return (
+    <div className="text-sm rounded-md border border-warning-subtle bg-warning-subtle p-4 text-primary">
+      {incompatible.length} selected project{incompatible.length === 1 ? " is" : "s are"} excluded from Story Points
+      totals because estimates are missing or use categories.
+    </div>
+  );
+}
+
+function EstimateSummaryCards({ data, compact = false }: { data: IWorkspaceReport; compact?: boolean }) {
+  const summary = data.estimates.summary;
+  return (
+    <div className={`grid grid-cols-2 gap-3 ${compact ? "lg:grid-cols-5" : "md:grid-cols-4 xl:grid-cols-7"}`}>
+      <StatCard label="Total estimated points" value={`${summary.total_estimated_points} SP`} />
+      <StatCard label="Completed points" value={`${summary.completed_points} SP`} />
+      <StatCard label="Remaining points" value={`${summary.remaining_points} SP`} />
+      {!compact && <StatCard label="In progress points" value={`${summary.in_progress_points} SP`} />}
+      <StatCard label="SP completion rate" value={`${summary.completion_rate}%`} />
+      <StatCard
+        label="Estimate coverage"
+        value={`${summary.coverage}%`}
+        detail={`${summary.estimated_items}/${summary.eligible_items} eligible work items`}
+      />
+      {!compact && <StatCard label="Unestimated work items" value={summary.unestimated_items} />}
+    </div>
+  );
+}
+
+function EstimateEmptyState({ data }: { data: IWorkspaceReport }) {
+  if (!data.estimates.configuration.is_available)
+    return (
+      <p className="text-sm rounded-md border border-subtle p-5 text-secondary">
+        Estimates are not configured for the selected projects. Configure a Points estimate system in Project Settings →
+        Estimates.
+      </p>
+    );
+  if (!data.estimates.summary.estimated_items)
+    return <p className="text-sm rounded-md border border-subtle p-5 text-secondary">No estimated work items yet.</p>;
+  return null;
+}
+
+function EstimateMemberTable({ data }: { data: IWorkspaceReport }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-sm w-full min-w-[780px] text-left">
+        <thead className="text-xs border-b border-subtle text-secondary">
+          <tr>
+            <th className="pb-3 font-medium">Member</th>
+            <th className="pb-3 text-right font-medium">Allocated SP</th>
+            <th className="pb-3 text-right font-medium">Completed SP</th>
+            <th className="pb-3 text-right font-medium">Remaining SP</th>
+            <th className="pb-3 text-right font-medium">Estimated items</th>
+            <th className="pb-3 text-right font-medium">Unestimated items</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.estimates.members.map((member) => (
+            <tr key={member.assignee_id ?? "unassigned"} className="border-b border-subtle last:border-0">
+              <td className="py-3 font-medium text-primary">
+                {member.assignee__display_name ||
+                  [member.assignee__first_name, member.assignee__last_name].filter(Boolean).join(" ") ||
+                  "Unassigned"}
+              </td>
+              <td className="py-3 text-right tabular-nums">{member.assigned_points}</td>
+              <td className="py-3 text-right tabular-nums">{member.completed_points}</td>
+              <td className="py-3 text-right tabular-nums">{member.remaining_points}</td>
+              <td className="py-3 text-right tabular-nums">{member.estimated_items}</td>
+              <td className="py-3 text-right tabular-nums">{member.unestimated_items}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function EstimateCycleTable({ data }: { data: IWorkspaceReport }) {
+  if (!data.estimates.cycles.length) return <p className="text-sm text-secondary">No cycle data is available.</p>;
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-sm w-full min-w-[820px] text-left">
+        <thead className="text-xs border-b border-subtle text-secondary">
+          <tr>
+            <th className="pb-3 font-medium">Cycle</th>
+            <th className="pb-3 font-medium">Project</th>
+            <th className="pb-3 text-right font-medium">Current scope SP</th>
+            <th className="pb-3 text-right font-medium">Completed SP</th>
+            <th className="pb-3 text-right font-medium">Remaining SP</th>
+            <th className="pb-3 text-right font-medium">Completion</th>
+            <th className="pb-3 text-right font-medium">Unestimated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.estimates.cycles.map((cycle) => (
+            <tr key={cycle.id} className="border-b border-subtle last:border-0">
+              <td className="py-3 font-medium text-primary">{cycle.name}</td>
+              <td className="py-3 text-secondary">{cycle.project__name}</td>
+              <td className="py-3 text-right tabular-nums">{cycle.current_scope_points}</td>
+              <td className="py-3 text-right tabular-nums">{cycle.completed_points}</td>
+              <td className="py-3 text-right tabular-nums">{cycle.remaining_points}</td>
+              <td className="py-3 text-right tabular-nums">{cycle.completion_rate}%</td>
+              <td className="py-3 text-right tabular-nums">{cycle.unestimated_items}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function EstimateWorkItemsSection() {
+  const { data, error, isLoading } = useWorkspaceReport();
+  if (isLoading) return <LoadingState />;
+  if (error || !data) return null;
+  const empty = <EstimateEmptyState data={data} />;
+  if (!data.estimates.configuration.is_available || !data.estimates.summary.estimated_items) return empty;
+  return (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <Section title="Work items by estimate size" description="Estimate levels come from the selected projects.">
+        <Distribution
+          total={data.estimates.summary.estimated_items}
+          rows={data.estimates.distribution.map((row) => ({
+            key: String(row.value),
+            label: row.label,
+            count: row.work_items,
+          }))}
+        />
+      </Section>
+      <Section title="Story Points by work item type">
+        <Distribution
+          total={data.estimates.summary.total_estimated_points}
+          rows={data.estimates.by_type.map((row) => ({
+            key: row.type_id ?? "no-type",
+            label: row.type_name,
+            count: row.points,
+          }))}
+        />
+      </Section>
+    </div>
+  );
+}
+
+export const EstimatesAnalytics = observer(function EstimatesAnalytics() {
+  const { data, error, isLoading, mutate } = useWorkspaceReport();
+  if (isLoading)
+    return (
+      <ReportPage title="Estimate analytics" description="Loading Story Points metrics.">
+        <LoadingState />
+      </ReportPage>
+    );
+  if (error || !data)
+    return (
+      <ReportPage title="Estimate analytics" description="Story Points across the selected scope.">
+        <ErrorState retry={() => void mutate()} />
+      </ReportPage>
+    );
+  const noEstimateData = !data.estimates.configuration.is_available || data.estimates.summary.estimated_items === 0;
+  const trend = data.estimates.completion_trend.map((row) => ({
+    ...row,
+    key: row.date,
+    name: row.date,
+    count: row.completed_points,
+  }));
+  return (
+    <ReportPage
+      title="Estimate analytics"
+      description="Current Story Points workload and completed points during the selected period. Parent estimates are replaced by leaf work item totals."
+    >
+      <DataRange data={data} />
+      <div className="space-y-5">
+        <EstimateConfigurationNotice data={data} />
+        {noEstimateData ? (
+          <EstimateEmptyState data={data} />
+        ) : (
+          <>
+            <EstimateSummaryCards data={data} />
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <Section title="Story Points progress" description="Cancelled work items are excluded.">
+                <Distribution
+                  total={data.estimates.summary.total_estimated_points}
+                  rows={data.estimates.progress.map((row) => ({
+                    key: row.group,
+                    label: row.group.replace("_", " "),
+                    count: row.points,
+                  }))}
+                />
+              </Section>
+              <Section title="Work items by estimate size" description="Values come from configured estimate systems.">
+                <Distribution
+                  total={data.estimates.summary.estimated_items}
+                  rows={data.estimates.distribution.map((row) => ({
+                    key: String(row.value),
+                    label: row.label,
+                    count: row.work_items,
+                  }))}
+                />
+              </Section>
+              <Section title="Completed Story Points over time" description="Uses the current completed_at value.">
+                <AreaChart
+                  className="h-[320px] w-full"
+                  data={trend}
+                  areas={[
+                    {
+                      key: "completed_points",
+                      label: "Completed SP",
+                      fill: "#46A75833",
+                      fillOpacity: 1,
+                      stackId: "completed-points",
+                      strokeColor: "#46A758",
+                      strokeOpacity: 1,
+                      showDot: false,
+                      smoothCurves: true,
+                    },
+                  ]}
+                  xAxis={{ key: "name", label: "Date" }}
+                  yAxis={{ key: "count", label: "Story Points", allowDecimals: true }}
+                  legend={{ align: "left", verticalAlign: "bottom", layout: "horizontal" }}
+                />
+              </Section>
+              <Section title="Story Points by work item type">
+                <Distribution
+                  total={data.estimates.summary.total_estimated_points}
+                  rows={data.estimates.by_type.map((row) => ({
+                    key: row.type_id ?? "no-type",
+                    label: row.type_name,
+                    count: row.points,
+                  }))}
+                />
+              </Section>
+            </div>
+            <Section
+              title="Estimated workload by member"
+              description="Allocated SP is split equally across current assignees and is not a performance score."
+            >
+              <EstimateMemberTable data={data} />
+            </Section>
+            <Section
+              title="Estimated vs completed points by cycle"
+              description="Current scope only; no historical baseline is inferred."
+            >
+              <EstimateCycleTable data={data} />
+            </Section>
+          </>
+        )}
+      </div>
+    </ReportPage>
+  );
+});
+
 export const WorkspaceReport = observer(function WorkspaceReport() {
   const { data, error, isLoading, mutate } = useWorkspaceReport();
   if (isLoading)
@@ -275,6 +534,19 @@ export const WorkspaceReport = observer(function WorkspaceReport() {
         <StatCard label="Active members" value={data.totals.active_members} />
         <StatCard label="Active cycles" value={data.totals.active_cycles} />
         <StatCard label="Average completion" value={formatDuration(data.totals.average_completion_seconds)} />
+      </div>
+      <div className="mt-5 space-y-3">
+        <Section
+          title="Estimate summary"
+          description="Story Points from eligible leaf work items; cancelled work is excluded."
+        >
+          {data.estimates.configuration.is_available ? (
+            <EstimateSummaryCards data={data} compact />
+          ) : (
+            <EstimateEmptyState data={data} />
+          )}
+        </Section>
+        <EstimateConfigurationNotice data={data} />
       </div>
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Section title="Created vs resolved" description="Based on work items created inside the selected period.">
@@ -392,6 +664,16 @@ export const MembersAnalytics = observer(function MembersAnalytics() {
           <p className="text-sm text-secondary">No assigned work items match the selected filters.</p>
         )}
       </Section>
+      {data.estimates.configuration.is_available && (
+        <div className="mt-5">
+          <Section
+            title="Allocated Story Points by member"
+            description="Points are split equally for multi-assignee work items and do not represent performance."
+          >
+            <EstimateMemberTable data={data} />
+          </Section>
+        </div>
+      )}
     </ReportPage>
   );
 });
@@ -427,21 +709,30 @@ export const ProjectsAnalytics = observer(function ProjectsAnalytics() {
                 <th className="pb-3 text-right font-medium">Overdue</th>
                 <th className="pb-3 text-right font-medium">Open bugs</th>
                 <th className="pb-3 text-right font-medium">Progress</th>
+                <th className="pb-3 text-right font-medium">Estimated SP</th>
+                <th className="pb-3 text-right font-medium">Completed SP</th>
+                <th className="pb-3 text-right font-medium">Remaining SP</th>
               </tr>
             </thead>
             <tbody>
-              {data.projects.map((project) => (
-                <tr key={project.id} className="border-b border-subtle last:border-0">
-                  <td className="py-3 font-medium text-primary">
-                    {project.identifier} {project.name}
-                  </td>
-                  <td className="py-3 text-right tabular-nums">{project.total}</td>
-                  <td className="py-3 text-right tabular-nums">{project.completed}</td>
-                  <td className="py-3 text-right tabular-nums">{project.overdue}</td>
-                  <td className="py-3 text-right tabular-nums">{project.open_bugs}</td>
-                  <td className="py-3 text-right tabular-nums">{project.progress}%</td>
-                </tr>
-              ))}
+              {data.projects.map((project) => {
+                const estimate = data.estimates.projects.find((row) => row.id === project.id);
+                return (
+                  <tr key={project.id} className="border-b border-subtle last:border-0">
+                    <td className="py-3 font-medium text-primary">
+                      {project.identifier} {project.name}
+                    </td>
+                    <td className="py-3 text-right tabular-nums">{project.total}</td>
+                    <td className="py-3 text-right tabular-nums">{project.completed}</td>
+                    <td className="py-3 text-right tabular-nums">{project.overdue}</td>
+                    <td className="py-3 text-right tabular-nums">{project.open_bugs}</td>
+                    <td className="py-3 text-right tabular-nums">{project.progress}%</td>
+                    <td className="py-3 text-right tabular-nums">{estimate?.total_points ?? "—"}</td>
+                    <td className="py-3 text-right tabular-nums">{estimate?.completed_points ?? "—"}</td>
+                    <td className="py-3 text-right tabular-nums">{estimate?.remaining_points ?? "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -474,6 +765,16 @@ function ProgressAnalytics({ entity }: { entity: "Cycle" | "Module" }) {
       <Section title={`${entity} comparison`}>
         <ProgressTable rows={entity === "Cycle" ? data.cycles : data.modules} entity={entity} />
       </Section>
+      {entity === "Cycle" && data.estimates.configuration.is_available && (
+        <div className="mt-5">
+          <Section
+            title="Cycle Story Points"
+            description="Current scope and completed points; no original baseline is inferred."
+          >
+            <EstimateCycleTable data={data} />
+          </Section>
+        </div>
+      )}
     </ReportPage>
   );
 }
@@ -611,6 +912,31 @@ export const AnalyticsReports = observer(function AnalyticsReports() {
               })),
               slug,
               "members"
+            )
+          }
+        />
+        <Button
+          variant="secondary"
+          size="sm"
+          stretch="auto"
+          label="Export estimates CSV"
+          icon={<Icon icon={DownloadOutline} />}
+          iconPosition="start"
+          onClick={() =>
+            exportRowsCSV(
+              data.estimates.projects.map((project) => ({
+                Project: project.name,
+                Identifier: project.identifier,
+                "Estimate type": project.estimate_type ?? "Not configured",
+                "Estimated SP": project.total_points,
+                "Completed SP": project.completed_points,
+                "Remaining SP": project.remaining_points,
+                "SP completion percent": project.completion_rate,
+                "Estimated items": project.estimated_items,
+                "Unestimated items": project.unestimated_items,
+              })),
+              slug,
+              "estimates"
             )
           }
         />

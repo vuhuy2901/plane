@@ -28,6 +28,7 @@ import {
 // components
 import { CycleSelect } from "@/components/dropdowns/cycle/cycle-select";
 import { EstimateSelect } from "@/components/dropdowns/estimate/estimate-select";
+import { displayedEstimate, usesHierarchicalEstimate } from "@/store/issue/helpers/hierarchical-estimate";
 import { MemberSelect } from "@/components/dropdowns/member/member-select";
 import { ModuleSelect } from "@/components/dropdowns/module/module-select";
 import { PrioritySelect } from "@/components/dropdowns/priority/priority-select";
@@ -384,14 +385,22 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
         <WithDisplayPropertiesHOC displayProperties={displayProperties} displayPropertyKey="estimate">
           {/* oxlint-disable-next-line jsx_a11y/click-events-have-key-events oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
           <div className="h-5" onFocus={handleEventPropagation} onClick={handleEventPropagation}>
-            <EstimateSelect
-              value={issue.estimate_point ?? undefined}
-              onChange={handleEstimate}
-              projectId={issue.project_id}
-              disabled={isReadOnly}
-              variant="pill-sm"
-              tooltip
-            />
+            {usesHierarchicalEstimate(issue) ? (
+              <Tooltip label="Automatically calculated from descendant work items">
+                <span className="inline-flex h-5 items-center rounded bg-layer-2 px-2 text-11 font-medium text-secondary">
+                  {displayedEstimate(issue)} pts
+                </span>
+              </Tooltip>
+            ) : (
+              <EstimateSelect
+                value={issue.estimate_point ?? undefined}
+                onChange={handleEstimate}
+                projectId={issue.project_id}
+                disabled={isReadOnly}
+                variant="pill-sm"
+                tooltip
+              />
+            )}
           </div>
         </WithDisplayPropertiesHOC>
       )}
