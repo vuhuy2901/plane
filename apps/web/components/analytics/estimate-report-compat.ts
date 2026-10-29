@@ -22,6 +22,7 @@ const emptyEstimateAnalytics = (): TWorkspaceEstimateAnalytics => ({
   distribution: [],
   by_type: [],
   members: [],
+  leaderboard: [],
   projects: [],
   cycles: [],
   completion_trend: [],
@@ -29,7 +30,7 @@ const emptyEstimateAnalytics = (): TWorkspaceEstimateAnalytics => ({
 
 export const normalizeWorkspaceEstimateAnalytics = (report: IWorkspaceReport): IWorkspaceReport => {
   const estimates = (report as IWorkspaceReport & { estimates?: TWorkspaceEstimateAnalytics }).estimates;
-  if (estimates) return report;
+  if (estimates) return { ...report, estimates: { ...estimates, leaderboard: estimates.leaderboard ?? [] } };
 
   return { ...report, estimates: emptyEstimateAnalytics() };
 };

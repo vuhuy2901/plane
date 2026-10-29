@@ -450,6 +450,7 @@ class WorkspaceReportEndpoint(BaseAPIView):
             cycles=cycles,
             range_start=range_start,
             range_end=range_end,
+            count_mode=count_mode,
         )
 
         return Response(
@@ -475,6 +476,11 @@ class WorkspaceReportEndpoint(BaseAPIView):
                         (
                             "Member completion is credited to every assignee "
                             "present now; historical assignee-at-completion is not stored."
+                        ),
+                        (
+                            "Story Points leaderboard uses current estimates and current assignees. "
+                            "Only work items still completed with a completed_at date in the selected "
+                            "period receive credit; earlier completion history is not reconstructed."
                         ),
                         (
                             "Automation execution duration is unavailable because "

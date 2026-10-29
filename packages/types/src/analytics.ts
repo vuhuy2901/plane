@@ -215,6 +215,32 @@ export interface TWorkspaceEstimateAnalytics {
     unestimated_items: number;
     allocation: "equal_share";
   }[];
+  leaderboard: {
+    key: string;
+    projects: string[];
+    scale: number[];
+    members: {
+      assignee_id: string | null;
+      assignee__display_name: string;
+      assignee__first_name: string;
+      assignee__last_name: string;
+      assignee__avatar: string | null;
+      assigned_points: number;
+      completed_points: number;
+      remaining_points: number;
+      completion_rate: number | null;
+      completed_items: number;
+      rank: number | null;
+      work_items: {
+        id: string;
+        project_id: string;
+        identifier: string;
+        name: string;
+        allocated_points: number;
+        completed_at: string;
+      }[];
+    }[];
+  }[];
   projects: {
     id: string;
     name: string;

@@ -1,6 +1,8 @@
 from collections import defaultdict
 from datetime import timedelta
 
+from django.utils import timezone
+
 from plane.db.models import EstimatePoint, Issue, IssueAssignee
 
 
@@ -27,9 +29,12 @@ def _leaf_rows(scope, point_project_ids):
         .exclude(state__group="cancelled")
         .values(
             "id",
+            "parent_id",
             "project_id",
             "project__name",
             "project__identifier",
+            "name",
+            "sequence_id",
             "state__group",
             "type_id",
             "type__name",
@@ -40,7 +45,9 @@ def _leaf_rows(scope, point_project_ids):
     )
 
 
-def build_estimate_analytics(*, current_scope, completion_scope, projects, cycles, range_start, range_end):
+def build_estimate_analytics(
+    *, current_scope, completion_scope, projects, cycles, range_start, range_end, count_mode="all"
+):
     project_configs = list(projects.values("id", "name", "identifier", "estimate_id", "estimate__type"))
     point_projects = [project for project in project_configs if project["estimate__type"] == "points"]
     point_project_ids = [project["id"] for project in point_projects]
@@ -94,17 +101,15 @@ def build_estimate_analytics(*, current_scope, completion_scope, projects, cycle
         type_points[type_key]["estimated_items"] += 1
         distribution_counts[value] += 1
 
-    configured_values = {
-        value
-        for value in (
-            _number(raw_value)
-            for raw_value in EstimatePoint.objects.filter(
-                project_id__in=point_project_ids,
-                estimate_id__in=[project["estimate_id"] for project in point_projects],
-            ).values_list("value", flat=True)
-        )
-        if value is not None
-    }
+    values_by_estimate = defaultdict(set)
+    for estimate_id, raw_value in EstimatePoint.objects.filter(
+        project_id__in=point_project_ids,
+        estimate_id__in=[project["estimate_id"] for project in point_projects],
+    ).values_list("estimate_id", "value"):
+        value = _number(raw_value)
+        if value is not None:
+            values_by_estimate[estimate_id].add(value)
+    configured_values = set().union(*values_by_estimate.values()) if values_by_estimate else set()
     distribution = [
         {"value": value, "label": f"{value:g} SP", "work_items": distribution_counts[value]}
         for value in sorted(configured_values | set(distribution_counts))
@@ -130,13 +135,17 @@ def build_estimate_analytics(*, current_scope, completion_scope, projects, cycle
             }
         )
 
+    completion_rows = _leaf_rows(completion_scope, point_project_ids)
+    completion_by_id = {row["id"]: row for row in completion_rows}
     assignees_by_issue = defaultdict(list)
-    for assignee in IssueAssignee.objects.filter(issue_id__in=rows_by_id, deleted_at__isnull=True).values(
+    all_row_ids = completion_by_id.keys() | rows_by_id.keys()
+    for assignee in IssueAssignee.objects.filter(issue_id__in=all_row_ids, deleted_at__isnull=True).values(
         "issue_id",
         "assignee_id",
         "assignee__display_name",
         "assignee__first_name",
         "assignee__last_name",
+        "assignee__avatar",
     ):
         assignees_by_issue[assignee["issue_id"]].append(assignee)
 
@@ -186,6 +195,100 @@ def build_estimate_analytics(*, current_scope, completion_scope, projects, cycle
         )
     members.sort(key=lambda row: (-row["assigned_points"], row["assignee__display_name"] or ""))
 
+    # A leaderboard groups only projects with the same configured point scale.
+    # Its denominator is current allocated work in the filtered scope; credit is
+    # given only for items currently completed in the selected completion window.
+    scale_projects = defaultdict(list)
+    for project in point_projects:
+        scale_projects[tuple(sorted(values_by_estimate[project["estimate_id"]]))].append(project)
+    leaderboard = []
+    for scale, grouped_projects in scale_projects.items():
+        project_ids = {project["id"] for project in grouped_projects}
+        metrics = defaultdict(
+            lambda: {"assigned_points": 0.0, "completed_points": 0.0, "completed_items": 0, "work_items": []}
+        )
+        identities = {}
+        for row in completion_rows:
+            if row["project_id"] not in project_ids:
+                continue
+            if count_mode == "top_level" and row["parent_id"] is not None:
+                continue
+            value = _number(row["estimate_point__value"])
+            if value is None:
+                continue
+            credited = (
+                row["state__group"] == "completed"
+                and row["completed_at"] is not None
+                and range_start <= timezone.localtime(row["completed_at"]).date() <= range_end
+            )
+            assignees = assignees_by_issue[row["id"]] or [{
+                "assignee_id": None,
+                "assignee__display_name": "Unassigned",
+                "assignee__first_name": "",
+                "assignee__last_name": "",
+                "assignee__avatar": None,
+            }]
+            share = value / len(assignees)
+            for assignee in assignees:
+                key = assignee["assignee_id"] or "unassigned"
+                identities[key] = assignee
+                metric = metrics[key]
+                metric["assigned_points"] += share
+                if credited:
+                    metric["completed_points"] += share
+                    metric["completed_items"] += 1
+                    metric["work_items"].append({
+                        "id": row["id"],
+                        "project_id": row["project_id"],
+                        "identifier": f'{row["project__identifier"]}-{row["sequence_id"]}',
+                        "name": row["name"],
+                        "allocated_points": _rounded(share),
+                        "completed_at": row["completed_at"],
+                    })
+        ranking = []
+        for key, metric in metrics.items():
+            identity = identities[key]
+            assigned = metric["assigned_points"]
+            completed = metric["completed_points"]
+            ranking.append({
+                "assignee_id": identity["assignee_id"],
+                "assignee__display_name": identity["assignee__display_name"],
+                "assignee__first_name": identity["assignee__first_name"],
+                "assignee__last_name": identity["assignee__last_name"],
+                "assignee__avatar": identity["assignee__avatar"],
+                "assigned_points": _rounded(assigned),
+                "completed_points": _rounded(completed),
+                "remaining_points": _rounded(max(assigned - completed, 0)),
+                "completion_rate": round(completed / assigned * 100, 2) if assigned else None,
+                "completed_items": metric["completed_items"],
+                "work_items": metric["work_items"],
+            })
+        ranking.sort(
+            key=lambda item: (
+                item["assignee_id"] is None,
+                -item["completed_points"],
+                item["assignee__display_name"] or "",
+            )
+        )
+        previous_points = None
+        rank = 0
+        position = 0
+        for member in ranking:
+            member["rank"] = None
+            if not member["assignee_id"] or member["completed_points"] <= 0:
+                continue
+            position += 1
+            if member["completed_points"] != previous_points:
+                rank = position
+            member["rank"] = rank
+            previous_points = member["completed_points"]
+        leaderboard.append({
+            "key": ",".join(str(project["id"]) for project in grouped_projects),
+            "projects": [project["name"] for project in grouped_projects],
+            "scale": list(scale),
+            "members": ranking,
+        })
+
     selected_cycles = list(
         cycles.order_by("-created_at")[:100].values(
             "id", "name", "project_id", "project__name", "start_date", "end_date"
@@ -219,7 +322,6 @@ def build_estimate_analytics(*, current_scope, completion_scope, projects, cycle
             }
         )
 
-    completion_rows = _leaf_rows(completion_scope, point_project_ids)
     trend_points = defaultdict(float)
     for row in completion_rows:
         value = _number(row["estimate_point__value"])
@@ -270,6 +372,7 @@ def build_estimate_analytics(*, current_scope, completion_scope, projects, cycle
             for key, metric in sorted(type_points.items(), key=lambda item: item[0][1])
         ],
         "members": members,
+        "leaderboard": leaderboard,
         "projects": project_rows,
         "cycles": cycle_rows,
         "completion_trend": completion_trend,

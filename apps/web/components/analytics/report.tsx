@@ -19,6 +19,7 @@ import { AnalyticsService } from "@/services/analytics.service";
 import AnalyticsWrapper from "./analytics-wrapper";
 import { normalizeWorkspaceEstimateAnalytics } from "./estimate-report-compat";
 import { exportRowsCSV } from "./export";
+import { MemberAvatar, StoryPointsLeaderboard } from "./story-points-leaderboard";
 
 const analyticsService = new AnalyticsService();
 
@@ -43,13 +44,14 @@ const WorkspaceReportContext = createContext<TWorkspaceReportContext | null>(nul
 export function WorkspaceReportProvider({ children }: { children: ReactNode }) {
   const { workspaceSlug } = useParams();
   const slug = String(workspaceSlug);
-  const { countMode, selectedDuration, selectedProjects } = useAnalytics();
+  const { countMode, selectedDuration, selectedProjects, selectedCycle } = useAnalytics();
   const report = useSWR<IWorkspaceReport>(
-    ["workspace-report", slug, selectedDuration, selectedProjects.join(","), countMode],
+    ["workspace-report", slug, selectedDuration, selectedProjects.join(","), countMode, selectedCycle],
     () =>
       analyticsService.getWorkspaceReport(slug, {
         date_filter: selectedDuration,
         count_mode: countMode,
+        ...(selectedCycle ? { cycle_ids: selectedCycle } : {}),
         ...(selectedProjects.length ? { project_ids: selectedProjects.join(",") } : {}),
       }),
     // A filter change represents a different report. Rendering the previous
@@ -278,7 +280,12 @@ function EstimateEmptyState({ data }: { data: IWorkspaceReport }) {
       </p>
     );
   if (!data.estimates.summary.estimated_items)
-    return <p className="text-sm rounded-md border border-subtle p-5 text-secondary">No estimated work items yet.</p>;
+    return (
+      <p className="text-sm rounded-md border border-subtle p-5 text-secondary">
+        No estimated work items were created in this period. The leaderboard below includes items completed in this
+        period.
+      </p>
+    );
   return null;
 }
 
@@ -290,7 +297,7 @@ function EstimateMemberTable({ data }: { data: IWorkspaceReport }) {
           <tr>
             <th className="pb-3 font-medium">Member</th>
             <th className="pb-3 text-right font-medium">Allocated SP</th>
-            <th className="pb-3 text-right font-medium">Completed SP</th>
+            <th className="pb-3 text-right font-medium">Completed SP (created cohort)</th>
             <th className="pb-3 text-right font-medium">Remaining SP</th>
             <th className="pb-3 text-right font-medium">Estimated items</th>
             <th className="pb-3 text-right font-medium">Unestimated items</th>
@@ -384,7 +391,8 @@ export function EstimateWorkItemsSection() {
 }
 
 export const EstimatesAnalytics = observer(function EstimatesAnalytics() {
-  const { data, error, isLoading, mutate } = useWorkspaceReport();
+  const { data, error, isLoading, mutate, slug } = useWorkspaceReport();
+  const { selectedCycle, updateSelectedCycle } = useAnalytics();
   if (isLoading)
     return (
       <ReportPage title="Estimate analytics" description="Loading Story Points metrics.">
@@ -410,6 +418,21 @@ export const EstimatesAnalytics = observer(function EstimatesAnalytics() {
       description="Current Story Points workload and completed points during the selected period. Parent estimates are replaced by leaf work item totals."
     >
       <DataRange data={data} />
+      <label className="text-sm mb-5 block text-secondary">
+        Cycle/Sprint:{" "}
+        <select
+          className="ml-2 rounded border border-subtle bg-surface-1 px-2 py-1 text-primary"
+          value={selectedCycle}
+          onChange={(event) => updateSelectedCycle(event.target.value)}
+        >
+          <option value="">All cycles</option>
+          {data.estimates.cycles.map((cycle) => (
+            <option key={cycle.id} value={cycle.id}>
+              {cycle.project__name} · {cycle.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="space-y-5">
         <EstimateConfigurationNotice data={data} />
         {noEstimateData ? (
@@ -473,7 +496,7 @@ export const EstimatesAnalytics = observer(function EstimatesAnalytics() {
             </div>
             <Section
               title="Estimated workload by member"
-              description="Allocated SP is split equally across current assignees and is not a performance score."
+              description="Created-in-period cohort. Allocated SP is split equally across current assignees."
             >
               <EstimateMemberTable data={data} />
             </Section>
@@ -484,6 +507,14 @@ export const EstimatesAnalytics = observer(function EstimatesAnalytics() {
               <EstimateCycleTable data={data} />
             </Section>
           </>
+        )}
+        {data.estimates.configuration.is_available && (
+          <Section
+            title="Story Points Leaderboard"
+            description="Completed work during the selected period, allocated equally among current assignees."
+          >
+            <StoryPointsLeaderboard data={data} slug={slug} />
+          </Section>
         )}
       </div>
     </ReportPage>
@@ -547,6 +578,24 @@ export const WorkspaceReport = observer(function WorkspaceReport() {
           )}
         </Section>
         <EstimateConfigurationNotice data={data} />
+        {data.estimates.leaderboard.length === 1 &&
+          data.estimates.leaderboard[0].members.filter((member) => member.rank === 1).length > 0 && (
+            <div className="rounded-md border border-subtle bg-surface-1 p-4">
+              <p className="text-xs text-secondary">
+                Top Completed SP · {data.meta.date_from} to {data.meta.date_to}
+              </p>
+              <div className="text-sm mt-2 flex flex-wrap gap-3 font-medium text-primary">
+                {data.estimates.leaderboard[0].members
+                  .filter((member) => member.rank === 1)
+                  .map((member) => (
+                    <span key={member.assignee_id} className="flex items-center gap-2">
+                      <MemberAvatar member={member} /> {member.assignee__display_name || member.assignee__first_name} ·{" "}
+                      {member.completed_points} SP
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
       </div>
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Section title="Created vs resolved" description="Based on work items created inside the selected period.">
@@ -608,7 +657,7 @@ export const WorkspaceReport = observer(function WorkspaceReport() {
 });
 
 export const MembersAnalytics = observer(function MembersAnalytics() {
-  const { data, error, isLoading, mutate } = useWorkspaceReport();
+  const { data, error, isLoading, mutate, slug } = useWorkspaceReport();
   if (isLoading)
     return (
       <ReportPage title="Member analytics" description="Loading workload data.">
@@ -621,6 +670,19 @@ export const MembersAnalytics = observer(function MembersAnalytics() {
         <ErrorState retry={() => void mutate()} />
       </ReportPage>
     );
+  const memberPoints = new Map(
+    (data.estimates.leaderboard.length === 1 ? data.estimates.leaderboard[0].members : []).map((member) => [
+      member.assignee_id,
+      member,
+    ])
+  );
+  // The web target does not include Array.toSorted yet.
+  // eslint-disable-next-line unicorn/no-array-sort
+  const orderedMembers = [...data.members].sort(
+    (left, right) =>
+      (memberPoints.get(right.assignee_id)?.completed_points ?? 0) -
+      (memberPoints.get(left.assignee_id)?.completed_points ?? 0)
+  );
   return (
     <ReportPage
       title="Member analytics"
@@ -629,7 +691,7 @@ export const MembersAnalytics = observer(function MembersAnalytics() {
       <DataRange data={data} />
       <Section
         title="Workload by member"
-        description="Completion is attributed to current assignees because historical assignee-at-completion is not available."
+        description="Work item counts use the created-in-period cohort. SP columns use current assignees and completed_at in the selected period when one estimate scale is selected."
       >
         {data.members.length ? (
           <div className="overflow-x-auto">
@@ -639,6 +701,8 @@ export const MembersAnalytics = observer(function MembersAnalytics() {
                   <th className="pb-3 font-medium">Member</th>
                   <th className="pb-3 text-right font-medium">Assigned</th>
                   <th className="pb-3 text-right font-medium">Completed</th>
+                  <th className="pb-3 text-right font-medium">Assigned SP</th>
+                  <th className="pb-3 text-right font-medium">Completed SP ↓</th>
                   <th className="pb-3 text-right font-medium">In progress</th>
                   <th className="pb-3 text-right font-medium">Overdue</th>
                   <th className="pb-3 text-right font-medium">Bugs assigned</th>
@@ -646,11 +710,17 @@ export const MembersAnalytics = observer(function MembersAnalytics() {
                 </tr>
               </thead>
               <tbody>
-                {data.members.map((member) => (
+                {orderedMembers.map((member) => (
                   <tr key={member.assignee_id} className="border-b border-subtle last:border-0">
                     <td className="py-3 font-medium text-primary">{memberName(member)}</td>
                     <td className="py-3 text-right tabular-nums">{member.assigned}</td>
                     <td className="py-3 text-right tabular-nums">{member.completed}</td>
+                    <td className="py-3 text-right tabular-nums">
+                      {memberPoints.get(member.assignee_id)?.assigned_points ?? "—"}
+                    </td>
+                    <td className="py-3 text-right tabular-nums">
+                      {memberPoints.get(member.assignee_id)?.completed_points ?? "—"}
+                    </td>
                     <td className="py-3 text-right tabular-nums">{member.in_progress}</td>
                     <td className="py-3 text-right tabular-nums">{member.overdue}</td>
                     <td className="py-3 text-right tabular-nums">{member.bugs_assigned}</td>
@@ -668,10 +738,15 @@ export const MembersAnalytics = observer(function MembersAnalytics() {
         <div className="mt-5">
           <Section
             title="Allocated Story Points by member"
-            description="Points are split equally for multi-assignee work items and do not represent performance."
+            description="Created-in-period cohort. Points are split equally for multi-assignee work items."
           >
             <EstimateMemberTable data={data} />
           </Section>
+          <div className="mt-5">
+            <Section title="Story Points Leaderboard" description="Select a member to inspect completed work items.">
+              <StoryPointsLeaderboard data={data} slug={slug} />
+            </Section>
+          </div>
         </div>
       )}
     </ReportPage>
