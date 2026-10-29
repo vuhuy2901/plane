@@ -12,6 +12,7 @@ import type {
   IUserActivityResponse,
   IInstanceAdminStatus,
   IUserProfileData,
+  IMyWorkDashboardData,
   IUserProfileProjectSegregation,
   IUserSettings,
   IUserEmailNotificationSettings,
@@ -159,6 +160,14 @@ export class UserService extends APIService {
 
   async getUserProfileData(workspaceSlug: string, userId: string): Promise<IUserProfileData> {
     return this.get(`/api/workspaces/${workspaceSlug}/user-stats/${userId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async getMyWorkDashboard(workspaceSlug: string): Promise<IMyWorkDashboardData> {
+    return this.get(`/api/workspaces/${workspaceSlug}/my-work-dashboard/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

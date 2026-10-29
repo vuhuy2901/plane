@@ -14,6 +14,7 @@ import { ContentWrapper } from "@plane/blocks/layout";
 import { PageHead } from "@/components/core/page-title";
 import { ProfileActivity } from "@/components/profile/overview/activity";
 import { ProfilePriorityDistribution } from "@/components/profile/overview/priority-distribution";
+import { PersonalWorkDashboard } from "@/components/profile/overview/personal-work-dashboard";
 import { ProfileStateDistribution } from "@/components/profile/overview/state-distribution";
 import { ProfileStats } from "@/components/profile/overview/stats";
 import { ProfileWorkload } from "@/components/profile/overview/workload";
@@ -21,6 +22,7 @@ import { ProfileWorkload } from "@/components/profile/overview/workload";
 import { USER_PROFILE_DATA } from "@plane/constants";
 // services
 import { UserService } from "@/services/user.service";
+import { useUser } from "@/hooks/store/user";
 import type { Route } from "./+types/page";
 const userService = new UserService();
 
@@ -28,8 +30,17 @@ export default function ProfileOverviewPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, userId } = params;
 
   const { t } = useTranslation();
+  const { data: currentUser } = useUser();
+  const isCurrentUser = currentUser?.id === userId;
   const { data: userProfile } = useSWR(USER_PROFILE_DATA(workspaceSlug, userId), () =>
     userService.getUserProfileData(workspaceSlug, userId)
+  );
+  const {
+    data: workDashboard,
+    error: workDashboardError,
+    isLoading: isWorkDashboardLoading,
+  } = useSWR(isCurrentUser ? `MY_WORK_DASHBOARD_${workspaceSlug}` : null, () =>
+    userService.getMyWorkDashboard(workspaceSlug)
   );
 
   const stateDistribution: IUserStateDistribution[] = Object.keys(GROUP_CHOICES).map((key) => {
@@ -43,6 +54,15 @@ export default function ProfileOverviewPage({ params }: Route.ComponentProps) {
     <>
       <PageHead title={t("profile.page_label")} />
       <ContentWrapper className="space-y-7">
+        {isCurrentUser && (
+          <PersonalWorkDashboard
+            data={workDashboard}
+            error={workDashboardError}
+            isLoading={isWorkDashboardLoading}
+            workspaceSlug={workspaceSlug}
+            userId={userId}
+          />
+        )}
         <ProfileStats userProfile={userProfile} />
         <ProfileWorkload stateDistribution={stateDistribution} />
         <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2">

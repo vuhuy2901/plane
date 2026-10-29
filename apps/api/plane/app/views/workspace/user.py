@@ -45,6 +45,7 @@ from plane.db.models import (
     IssueActivity,
     FileAsset,
     IssueLink,
+    IssueRelation,
     IssueSubscriber,
     Project,
     ProjectMember,
@@ -577,6 +578,62 @@ class UserActivityGraphEndpoint(BaseAPIView):
         )
 
         return Response(issue_activities, status=status.HTTP_200_OK)
+
+
+class WorkspaceMyWorkDashboardEndpoint(BaseAPIView):
+    """Return the current member's active work in a compact dashboard shape."""
+
+    def get(self, request, slug):
+        workspace = Workspace.objects.only("timezone").get(slug=slug)
+        issues = list(
+            Issue.issue_objects.filter(
+                Q(assignees=request.user, issue_assignee__deleted_at__isnull=True),
+                _visible_issues_q(request.user),
+                workspace__slug=slug,
+            )
+            .exclude(state__group__in=["completed", "cancelled"])
+            .select_related("project", "state", "parent", "estimate_point")
+            .order_by("target_date", "-priority")
+            .distinct()
+        )
+
+        issue_ids = [issue.id for issue in issues]
+        blocked_issue_ids = set(
+            IssueRelation.objects.filter(
+                issue_id__in=issue_ids,
+                relation_type="blocked_by",
+                related_issue__state__group__in=["backlog", "unstarted", "started", "triage"],
+            ).values_list("issue_id", flat=True)
+        )
+
+        return Response(
+            {
+                "timezone": workspace.timezone,
+                "issues": [
+                    {
+                        "id": issue.id,
+                        "name": issue.name,
+                        "sequence_id": issue.sequence_id,
+                        "project_id": issue.project_id,
+                        "project_name": issue.project.name,
+                        "project_identifier": issue.project.identifier,
+                        "priority": issue.priority,
+                        "state_id": issue.state_id,
+                        "state_name": issue.state.name,
+                        "state_group": issue.state.group,
+                        "state_color": issue.state.color,
+                        "start_date": issue.start_date,
+                        "target_date": issue.target_date,
+                        "estimate": issue.estimate_point.value if issue.estimate_point else issue.point,
+                        "parent_id": issue.parent_id,
+                        "parent_name": issue.parent.name if issue.parent else None,
+                        "is_blocked": issue.id in blocked_issue_ids,
+                    }
+                    for issue in issues
+                ],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class UserIssueCompletedGraphEndpoint(BaseAPIView):

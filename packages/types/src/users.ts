@@ -163,6 +163,31 @@ export interface IUserProfileData {
   subscribed_issues: number;
 }
 
+export interface IMyWorkDashboardIssue {
+  id: string;
+  name: string;
+  sequence_id: number;
+  project_id: string;
+  project_name: string;
+  project_identifier: string;
+  priority: TIssuePriorities;
+  state_id: string;
+  state_name: string;
+  state_group: TStateGroups | "triage";
+  state_color: string;
+  start_date: string | null;
+  target_date: string | null;
+  estimate: string | number | null;
+  parent_id: string | null;
+  parent_name: string | null;
+  is_blocked: boolean;
+}
+
+export interface IMyWorkDashboardData {
+  timezone: string;
+  issues: IMyWorkDashboardIssue[];
+}
+
 export interface IUserProfileProjectSegregation {
   project_data: {
     assigned_issues: number;
